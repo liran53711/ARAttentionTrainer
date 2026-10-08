@@ -1,0 +1,39 @@
+# ═══════════════════════════════════════════════════════
+# Unity 自动生成的大目录（必须忽略，否则仓库会爆炸到 GB 级）
+# ═══════════════════════════════════════════════════════
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+
+# IDE 自动生成
+*.csproj
+*.sln
+*.slnx
+.vs/
+.idea/
+.vscode/
+
+# 构建产物与崩溃日志
+*.apk
+*.aab
+*.log
+crashlytics-build.properties
+sysinfo.txt
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ═══════════════════════════════════════════════════════
+# 第三方 SDK 安装包（大文件，本地归档用；重下链接见 README/docs）
+# ═══════════════════════════════════════════════════════
+tools/packages/*.tgz
+tools/packages/*.zip
+
+# 注：推理模型 Assets/Models/*.sentis（约2.4MB）正常入库，不忽略
