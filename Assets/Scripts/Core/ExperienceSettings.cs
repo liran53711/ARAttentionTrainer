@@ -12,8 +12,8 @@ public class ExperienceSettings : ScriptableObject
     public int detectionStride = 2;
 
     [Range(0f, 1f)]
-    [Tooltip("置信度阈值：低于此值的检测框丢弃")]
-    public float detectionConfThreshold = 0.5f;
+    [Tooltip("置信度阈值：低于此值的检测框丢弃（官方样例推荐 0.23，起步取 0.35，可按效果调）")]
+    public float detectionConfThreshold = 0.35f;
 
     [Tooltip("PCA 请求分辨率（真机用）")]
     public int requestedCameraWidth = 1280;

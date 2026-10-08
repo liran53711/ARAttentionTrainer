@@ -7,7 +7,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.Video;
 
-public class VideoFileFrameSource : MonoBehaviour, IFrameSource
+public class VideoFileFrameSource : FrameSourceBehaviour
 {
     [Header("视频")]
     [Tooltip("StreamingAssets 下的文件名，例如 test.mp4")]
@@ -28,7 +28,7 @@ public class VideoFileFrameSource : MonoBehaviour, IFrameSource
 
     VideoPlayer _player;
 
-    public bool IsReady => _player != null && _player.isPrepared && _player.frame > 0;
+    public override bool IsReady => _player != null && _player.isPrepared && _player.frame > 0;
 
     void Awake()
     {
@@ -64,7 +64,7 @@ public class VideoFileFrameSource : MonoBehaviour, IFrameSource
         }
     }
 
-    public bool TryGetFrame(out CameraFrame frame)
+    public override bool TryGetFrame(out CameraFrame frame)
     {
         frame = default;
         if (!IsReady) return false;
