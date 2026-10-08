@@ -12,10 +12,14 @@ public class M3DebugDriver : MonoBehaviour
     public ExperienceSettings settings;
     public IPDebugView ipView;
     public AudioCuePlayer audioPlayer;
+    public MicVadService vadService;
 
     [Header("模拟模式（电脑端）")]
     [Tooltip("true=键盘K模拟注视（电脑调试）；真机阶段换真实头姿判定")]
     public bool simulateGazeWithKeyboard = true;
+
+    [Tooltip("true=麦克风VAD判定讲话（推荐）；false=键盘L模拟")]
+    public bool useMicVad = true;
 
     // 逻辑模块（纯 C#）
     TargetTrackerLogic _tracker;
@@ -30,7 +34,7 @@ public class M3DebugDriver : MonoBehaviour
     bool _simLooking;             // K 键：模拟"孩子在注视"
 
     // IP 动画运行时
-    enum IpAnim { Hidden, Appearing, GuidingMove, Hiding, FeedbackPulse }
+    enum IpAnim { Hidden, Appearing, GuidingMove, Hiding, FeedbackPulse, Peek }
     IpAnim _ipAnim = IpAnim.Hidden;
     float _ipAnimT;
     Vector2 _ipFrom = new Vector2(0.5f, 0.5f);
@@ -40,6 +44,7 @@ public class M3DebugDriver : MonoBehaviour
 
     float _sampleTimer;
     float _fpsSmooth = 60f;
+    float _peekTimer;          // 隐藏期微提示计时
     InteractionState _prevState = InteractionState.Idle;
     static readonly List<DetectionResult> EmptyDetections = new List<DetectionResult>();
 
@@ -56,7 +61,11 @@ public class M3DebugDriver : MonoBehaviour
         _logger = new SessionLogger(Application.persistentDataPath);
         _logger.LogEvent("SessionStart");
         Debug.Log($"[M3] 会话数据目录：{_logger.SessionDir}");
-        Debug.Log("[M3] 键盘：K=切换模拟注视 | L=切换模拟讲话 | R=重置会话");
+        string speechMode = (useMicVad && vadService != null && vadService.MicRunning)
+            ? "麦克风VAD（对着麦克风讲话＝老师在说话）"
+            : "键盘L模拟";
+        Debug.Log($"[M3] 讲话输入：{speechMode}");
+        Debug.Log("[M3] 键盘：K=切换模拟注视 | L=切换模拟讲话(仅无麦时) | R=重置会话");
     }
 
     void Update()
@@ -65,15 +74,26 @@ public class M3DebugDriver : MonoBehaviour
         if (dt <= 0f) dt = 1f / 60f;
         _fpsSmooth = Mathf.Lerp(_fpsSmooth, 1f / dt, 0.05f);
 
-        // ── 键盘模拟输入 ──
+        // ── 输入：注视（键盘K模拟）+ 讲话（麦克风VAD优先，键盘L回退）──
+        bool vadActive = useMicVad && vadService != null && vadService.MicRunning;
         var kb = Keyboard.current;
         if (kb != null)
         {
             if (kb.kKey.wasPressedThisFrame) _simLooking = !_simLooking;
-            if (kb.lKey.wasPressedThisFrame) _speaking = !_speaking;
+            if (kb.lKey.wasPressedThisFrame && !vadActive) _speaking = !_speaking;
             if (kb.rKey.wasPressedThisFrame) ResetSession();
         }
-        bool speechEnded = _prevSpeaking && !_speaking;
+
+        bool speechEnded;
+        if (vadActive)
+        {
+            speechEnded = vadService.Logic.SpeechEnded;
+            _speaking = vadService.Logic.Speaking;
+        }
+        else
+        {
+            speechEnded = _prevSpeaking && !_speaking;
+        }
         _prevSpeaking = _speaking;
 
         // ── 跟踪（选目标 + 头部点 + 滤波）──
@@ -149,6 +169,22 @@ public class M3DebugDriver : MonoBehaviour
                 detector != null ? detector.LastInferenceMs : 0f);
         }
 
+        // ── 隐藏期微提示（Peek）：长讲话中隔一会儿探头，维持注意力 ──
+        if (_sm.State == InteractionState.Hidden && _speaking)
+        {
+            _peekTimer += dt;
+            float interval = settings != null ? settings.peekIntervalSeconds : 10f;
+            if (_peekTimer >= interval && _ipAnim == IpAnim.Hidden)
+            {
+                StartIpPeek(snapshot);
+                _peekTimer = 0f;
+            }
+        }
+        else if (_sm.State != InteractionState.Hidden)
+        {
+            _peekTimer = 0f;
+        }
+
         // ── IP 动画推进 + 喂给视图 ──
         UpdateIpAnim(dt, snapshot);
         if (ipView != null)
@@ -163,13 +199,21 @@ public class M3DebugDriver : MonoBehaviour
             if (_sm.State == InteractionState.Hidden)
             {
                 float need = (settings != null ? settings.gazeSustainSeconds : 2f) - _gaze.Dwell;
-                hint = need > 0f
-                    ? $"　→ 再看 {need:0.0}s 达成注视"
-                    : (_speaking ? "　→ 注视已达成，等老师讲完" : "　→ 注视已达成+讲完了！");
+                if (need > 0f)
+                    hint = $"　→ 再看 {need:0.0}s 达成注视";
+                else if (_speaking)
+                {
+                    float interval = settings != null ? settings.peekIntervalSeconds : 10f;
+                    hint = $"　→ 注视已达成，等老师讲完（下次探头 {Mathf.Max(0f, interval - _peekTimer):0}s）";
+                }
+                else hint = "　→ 注视已达成+讲完了！";
             }
+            string speechInfo = vadActive
+                ? $"{(_speaking ? "开" : "关")}[VAD {vadService.LastEnergyDb:0}dB/底{vadService.Logic.NoiseFloorDb:0}]"
+                : $"{(_speaking ? "开" : "关")}[键盘]";
             ipView.statusLine =
                 $"状态:{_sm.State} | 模拟注视:{(_simLooking ? "开" : "关")} 累计:{_gaze.Dwell:0.0}s" +
-                $" | 讲话:{(_speaking ? "开" : "关")} | 目标:{(snapshot.valid ? "有效" : "无")}{hint}";
+                $" | 讲话:{speechInfo} | 目标:{(snapshot.valid ? "有效" : "无")}{hint}";
         }
     }
 
@@ -193,6 +237,17 @@ public class M3DebugDriver : MonoBehaviour
         _ipAnimT = 0f;
         _ipAlpha = 0f;
         _ipScale = 0.5f;
+    }
+
+    void StartIpPeek(TargetSnapshot snapshot)
+    {
+        // 从老师头的左/右侧短暂探出头来（不打断注视的"微提示"）
+        var basePos = snapshot.valid ? snapshot.headPoint01 : new Vector2(0.5f, 0.5f);
+        float side = Random.value < 0.5f ? -1f : 1f;
+        _ipPos = basePos + new Vector2(side * 0.10f, Random.Range(-0.05f, 0.02f));
+        _ipAnim = IpAnim.Peek;
+        _ipAnimT = 0f;
+        _ipScale = 0.7f;
     }
 
     Vector2 TargetOrCenter(TargetSnapshot s) => s.valid ? s.headPoint01 : new Vector2(0.5f, 0.5f);
@@ -234,6 +289,18 @@ public class M3DebugDriver : MonoBehaviour
                 _ipScale = 0.5f + 0.5f * appear + 0.15f * Mathf.Sin(_ipAnimT * 10f) * appear;
                 float dur = settings != null ? settings.feedbackDurationSeconds : 2f;
                 if (_ipAnimT >= dur) { _ipAnim = IpAnim.Hidden; _ipAlpha = 0f; }
+                break;
+            }
+            case IpAnim.Peek: // 短暂探头：0.2s 淡入 → 保持 → 0.25s 淡出（带轻微摆动）
+            {
+                float dur = settings != null ? settings.peekDurationSeconds : 0.8f;
+                const float fadeIn = 0.2f, fadeOut = 0.25f;
+                float t = _ipAnimT;
+                if (t < fadeIn) _ipAlpha = t / fadeIn;
+                else if (t < dur - fadeOut) _ipAlpha = 1f;
+                else _ipAlpha = Mathf.Clamp01((dur - t) / fadeOut);
+                _ipScale = Mathf.Lerp(0.75f, 0.95f, Mathf.PingPong(t * 1.2f, 1f));
+                if (t >= dur) { _ipAnim = IpAnim.Hidden; _ipAlpha = 0f; }
                 break;
             }
             case IpAnim.Hidden:

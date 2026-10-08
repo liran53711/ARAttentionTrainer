@@ -51,4 +51,11 @@ public class ExperienceSettings : ScriptableObject
 
     [Tooltip("训练日志采样间隔（秒）")]
     public float logSampleEverySeconds = 2f;
+
+    [Header("隐藏期微提示（Peek）")]
+    [Tooltip("讲话继续这么久，精灵探头一次（吸引持续注意力）")]
+    public float peekIntervalSeconds = 10f;
+
+    [Tooltip("探头动作持续时间（秒）")]
+    public float peekDurationSeconds = 0.8f;
 }

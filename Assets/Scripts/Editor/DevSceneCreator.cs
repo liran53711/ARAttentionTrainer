@@ -53,12 +53,14 @@ public static class DevSceneCreator
 
         var ipView = root.AddComponent<IPDebugView>();
         var audio = root.AddComponent<AudioCuePlayer>();
+        var vad = root.AddComponent<MicVadService>();
 
         var driver = root.AddComponent<M3DebugDriver>();
         driver.detector = detector;
         driver.settings = settings;
         driver.ipView = ipView;
         driver.audioPlayer = audio;
+        driver.vadService = vad;
 
         EditorSceneManager.SaveScene(scene, ScenePath);
         AssetDatabase.SaveAssets();
@@ -67,9 +69,10 @@ public static class DevSceneCreator
         EditorUtility.DisplayDialog("完成",
             $"开发测试场景已创建：{ScenePath}\n\n" +
             "点 Play 后：\n" +
+            "· 前2秒安静（噪声底校准），然后对着麦克风讲话＝老师在说话\n" +
             "· 默认（讲话中+未注视）→ IP 圆出现并移向画面中的人\n" +
             "· K 切换模拟注视（持续 0.8s → 隐藏）\n" +
-            "· L 切换模拟讲话　R 重置会话\n" +
-            "· 会话数据在 persistentDataPath/sessions/ 下", "好");
+            "· 停止讲话约0.5秒＝一段话讲完（有麦时自动判定）\n" +
+            "· R 重置会话；会话数据在 persistentDataPath/sessions/ 下", "好");
     }
 }
