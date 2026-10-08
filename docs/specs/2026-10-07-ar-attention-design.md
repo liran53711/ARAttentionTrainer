@@ -145,6 +145,14 @@ PCA相机帧 ─► FaceDetector(隔帧推理) ─► TargetTracker(深度射线
 - NMS：少量候选框用 CPU 后处理即可（备选 Sentis Functional.NMS）
 - 输出：bbox（归一化）+ 置信度；置信阈值 ~0.5（可调）
 
+### 4.2.1 检测能力演进（2026-10-08 记录，来自首次视频验证反馈）
+
+当前模型是 COCO 通用 YOLOv9（官方样例同款），输出**人框**（含全身）而非纯人脸框。演进路线：
+
+1. **M3 起步（零成本，优先做）**：用"人框的上部中心"作为头部/面部位置的启发式——取框顶部往下约 25% 高度的水平中心点。引导目标、躲藏位、方向锚全部使用该点。
+2. **增强步骤（M3 之后视时间）**：替换为**人脸专用模型**（首选 BlazeFace——Unity 官方 Sentis 示例自带；备选 YuNet/MIT）。架构已为模型替换做好准备：`DetectionResult` 与具体模型解耦，仅需新增一个解析分支 + 换模型资产。
+3. **"识别特定的人"（结题增强 / 论文展望，不入 MVP）**：三条路线——①空间锁定（1对1对坐场景 = 最大最居中 + 时序滞回，M3 已规划）；②外观记忆（颜色特征找回，行为上近似"认识"）；③真实人脸识别（embedding + 预录入照片；涉及儿童隐私与伦理，列入 Future Work）。
+
 ### 4.3 人脸 3D 位置估计（"空间粗定位 + 视觉精定位"）
 1. **主路径**：`ViewportPointToRay(bboxCenter, cachedPose)` → `EnvironmentRaycastManager.Raycast` → 命中点即真实米制距离 → 位置 = pose.position + dir × dist
 2. **兜底**：尺度估计 `dist = f_px × 0.15m / bbox宽px`（人脸宽按 150mm；后续可升级 IPD 估计）
