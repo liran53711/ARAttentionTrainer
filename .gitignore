@@ -9,6 +9,7 @@
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
 [Mm]emoryCaptures/
+.utmp/
 
 # IDE 自动生成
 *.csproj

@@ -23,7 +23,10 @@ MonoBehaviour:
   gazeStartSeconds: 0.8
   gazeSustainSeconds: 2
   gazeViewportRadius: 0.28
+  gazeFreshnessSeconds: 0.4
   reGuideCooldownSeconds: 3
   feedbackDurationSeconds: 2
   idleTimeoutSeconds: 10
   logSampleEverySeconds: 2
+  peekIntervalSeconds: 10
+  peekDurationSeconds: 0.8

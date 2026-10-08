@@ -41,6 +41,7 @@ public class FaceDetector : MonoBehaviour
         _inputSize = new Vector2Int(inputShape.Get(2), inputShape.Get(3));
         _worker = new Worker(model, settings.useGpuBackend ? BackendType.GPUCompute : BackendType.CPU);
         _input = new Tensor<float>(new TensorShape(1, 3, _inputSize.x, _inputSize.y));
+        Debug.Log($"[FaceDetector] 模型输入 {_inputSize.x}x{_inputSize.y}，后端 = {(settings.useGpuBackend ? "GPU" : "CPU")}");
 
         PreloadModel(settings.modelAsset); // 首次推理会阻塞数秒（算子编译），提前做完
         StartCoroutine(DetectionLoop());
@@ -87,19 +88,17 @@ public class FaceDetector : MonoBehaviour
         TextureConverter.ToTensor(frame.texture, _input, textureTransform);
         _worker.Schedule(_input);
 
-        // 异步回读三个输出（绝不用阻塞版 ReadbackAndClone）
+        // 异步回读三个输出：并发发起（三个同时排队，而不是一个一个等）
         var boxesAwaiter = (_worker.PeekOutput(0) as Tensor<float>).ReadbackAndCloneAsync().GetAwaiter();
-        while (!boxesAwaiter.IsCompleted) yield return null;
-        using var boxes = boxesAwaiter.GetResult();
-        if (boxes.shape[0] == 0) { Latest = new List<DetectionResult>(); yield break; }
-
         var classIdsAwaiter = (_worker.PeekOutput(1) as Tensor<int>).ReadbackAndCloneAsync().GetAwaiter();
-        while (!classIdsAwaiter.IsCompleted) yield return null;
-        using var classIds = classIdsAwaiter.GetResult();
-
         var scoresAwaiter = (_worker.PeekOutput(2) as Tensor<float>).ReadbackAndCloneAsync().GetAwaiter();
-        while (!scoresAwaiter.IsCompleted) yield return null;
+        while (!boxesAwaiter.IsCompleted || !classIdsAwaiter.IsCompleted || !scoresAwaiter.IsCompleted)
+            yield return null;
+
+        using var boxes = boxesAwaiter.GetResult();
+        using var classIds = classIdsAwaiter.GetResult();
         using var scores = scoresAwaiter.GetResult();
+        if (boxes.shape[0] == 0) { Latest = new List<DetectionResult>(); LastInferenceMs = (Time.realtimeSinceStartup - t0) * 1000f; yield break; }
 
         // 解析 → 只留 person（classId 0）→ 置信度过滤 + NMS
         var raw = new List<DetectionResult>();

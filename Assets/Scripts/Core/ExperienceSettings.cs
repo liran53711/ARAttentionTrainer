@@ -40,6 +40,9 @@ public class ExperienceSettings : ScriptableObject
     [Tooltip("注视判定：目标离屏幕中心多近算'在看'（视口半径）")]
     public float gazeViewportRadius = 0.28f;
 
+    [Tooltip("注视判定：人脸检测必须比这个时间更新（脸不在画面里=没在看，而不是记住10秒前）")]
+    public float gazeFreshnessSeconds = 0.4f;
+
     [Tooltip("重新引导冷却：两次引导出现的最小间隔")]
     public float reGuideCooldownSeconds = 3f;
 

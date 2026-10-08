@@ -33,12 +33,17 @@ public class VideoFileFrameSource : FrameSourceBehaviour
     void Awake()
     {
         string path = Path.Combine(Application.streamingAssetsPath, videoFileName);
+#if !UNITY_ANDROID
         if (!File.Exists(path))
         {
             Debug.LogError($"[VideoFileFrameSource] 找不到视频文件：{path}\n" +
                            "请把测试视频放到 Assets/StreamingAssets/ 下，文件名与 Inspector 中一致。");
             return;
         }
+#else
+        // Android 上 StreamingAssets 在 APK 内部（jar 路径），File.Exists 不可用；
+        // 直接把路径交给 VideoPlayer，它能处理 jar:file:// 形式的 URL。
+#endif
 
         OutputTexture = new RenderTexture(renderTextureSize, renderTextureSize, 0);
         OutputTexture.Create();
@@ -50,7 +55,8 @@ public class VideoFileFrameSource : FrameSourceBehaviour
         _player.targetTexture = OutputTexture;
         _player.isLooping = true;
         _player.playOnAwake = false;
-        _player.audioOutputMode = VideoAudioOutputMode.None; // 本阶段只需要画面
+        // 播放视频原声：麦克风（VAD）能"听到老师讲话"，实现全自动闭环演示
+        _player.audioOutputMode = VideoAudioOutputMode.Direct;
         _player.prepareCompleted += _ => _player.Play();
         _player.Prepare();
     }

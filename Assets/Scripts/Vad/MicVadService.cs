@@ -25,7 +25,14 @@ public class MicVadService : MonoBehaviour
             UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.Microphone);
 #endif
 
-        _clip = Microphone.Start(null, true, 1, SampleRate);
+        try
+        {
+            _clip = Microphone.Start(null, true, 1, SampleRate);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"[VAD] Microphone.Start 异常：{e.Message}");
+        }
         MicRunning = _clip != null && Microphone.IsRecording(null);
         if (MicRunning)
             Debug.Log("[VAD] 麦克风已启动（前2秒为噪声底校准，请保持安静）");

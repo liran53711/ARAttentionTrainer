@@ -114,8 +114,11 @@ public class M3DebugDriver : MonoBehaviour
         }
         else if (snapshot.valid)
         {
-            looking = GazeLogic.IsLookingAt(snapshot.headPoint01,
-                settings != null ? settings.gazeViewportRadius : 0.28f);
+            // 几何代理：目标在视野中心附近 且 检测是新鲜的（脸不在画面里 = 没在看）
+            float fresh = settings != null ? settings.gazeFreshnessSeconds : 0.4f;
+            looking = snapshot.lastSeenSeconds < fresh &&
+                      GazeLogic.IsLookingAt(snapshot.headPoint01,
+                          settings != null ? settings.gazeViewportRadius : 0.28f);
         }
         else looking = false;
         _gaze.Tick(looking, dt);
