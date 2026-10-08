@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d33e6d1e6a7199046adfc658221ed3b1, type: 3}
   m_Name: ExperienceSettings
   m_EditorClassIdentifier: ARAttention::ExperienceSettings
-  detectionStride: 2
+  detectionStride: 1
   detectionConfThreshold: 0.35
   requestedCameraWidth: 1280
   requestedCameraHeight: 960
@@ -20,3 +20,10 @@ MonoBehaviour:
   useGpuBackend: 0
   drawDetectionBoxes: 1
   showFpsHud: 1
+  gazeStartSeconds: 0.8
+  gazeSustainSeconds: 2
+  gazeViewportRadius: 0.28
+  reGuideCooldownSeconds: 3
+  feedbackDurationSeconds: 2
+  idleTimeoutSeconds: 10
+  logSampleEverySeconds: 2

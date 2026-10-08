@@ -25,6 +25,7 @@ public class TargetTrackerLogic
     readonly float _lostKeepSec;
     readonly float _idleDropSec;
     readonly float _matchRadius;
+    readonly float _reAcquireSec;
     readonly OneEuroFilter _fx = new OneEuroFilter();
     readonly OneEuroFilter _fy = new OneEuroFilter();
 
@@ -34,12 +35,14 @@ public class TargetTrackerLogic
     float _lastSeen;
 
     public TargetTrackerLogic(float switchHysteresis = 1.25f, float lostKeepSec = 1f,
-                              float idleDropSec = 10f, float matchRadius = 0.25f)
+                              float idleDropSec = 10f, float matchRadius = 0.25f,
+                              float reAcquireSec = 1.5f)
     {
         _switchHysteresis = switchHysteresis;
         _lostKeepSec = lostKeepSec;
         _idleDropSec = idleDropSec;
         _matchRadius = matchRadius;
+        _reAcquireSec = reAcquireSec;
     }
 
     public void Reset()
@@ -95,6 +98,13 @@ public class TargetTrackerLogic
             { chosen = bestIdx; snapped = true; }
             else
             { chosen = matchIdx; }
+        }
+        else if (_lastSeen >= _reAcquireSec && bestIdx >= 0)
+        {
+            // 长时间没匹配上（镜头切换 / 老师换了位置）→ 允许重新锁定新目标，
+            // 否则会死守旧位置直到 idleDropSec 才恢复
+            chosen = bestIdx;
+            snapped = true;
         }
         // else: 本帧无匹配 → 走丢失路径
 

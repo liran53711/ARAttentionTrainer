@@ -54,6 +54,22 @@ public class TargetTrackerLogicTests
     }
 
     [Test]
+    public void LostTarget_ReAcquires_NewPersonAfterDelay()
+    {
+        var t = new TargetTrackerLogic(lostKeepSec: 1f, idleDropSec: 10f, reAcquireSec: 1.5f);
+        t.Tick(L(D(0.05f, 0.05f, 0.3f, 0.3f)), Dt);   // 锁定左侧的人
+
+        for (int i = 0; i < 48; i++) t.Tick(Empty, Dt); // 1.6s 无检测
+
+        // 远处出现新的人（模拟镜头切换）→ 应重新锁定而不是死守旧位置
+        var s = t.Tick(L(D(0.60f, 0.30f, 0.35f, 0.35f)), Dt);
+        Assert.IsTrue(s.valid);
+        Assert.IsFalse(s.frozen);
+        Assert.Less(Vector2.Distance(s.headPoint01, new Vector2(0.775f, 0.3875f)), 0.05f,
+            "应重新锁定到新位置（头部约 0.775,0.3875）");
+    }
+
+    [Test]
     public void Lost_HoldThenFreezeThenInvalid()
     {
         var t = new TargetTrackerLogic(lostKeepSec: 1f, idleDropSec: 10f);

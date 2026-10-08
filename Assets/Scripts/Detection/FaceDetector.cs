@@ -52,7 +52,8 @@ public class FaceDetector : MonoBehaviour
         var model = ModelLoader.Load(modelAsset);
         using var worker = new Worker(model, BackendType.CPU);
         var tempTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-        var textureTransform = new TextureTransform().SetDimensions(tempTexture.width, tempTexture.height, 3);
+        // 注：Sentis 2.6 起 SetDimensions 已弃用——目标张量的尺寸会被自动采用
+        var textureTransform = new TextureTransform();
         var inputShape = model.inputs[0].shape;
         using var input = new Tensor<float>(new TensorShape(1, 3, inputShape.Get(2), inputShape.Get(3)));
         TextureConverter.ToTensor(tempTexture, input, textureTransform);
@@ -81,8 +82,8 @@ public class FaceDetector : MonoBehaviour
     {
         float t0 = Time.realtimeSinceStartup;
 
-        // GPU 侧预处理：源纹理 → 张量（SetDimensions 描述的是"源"的尺寸，转换器负责缩放到张量尺寸）
-        var textureTransform = new TextureTransform().SetDimensions(frame.texture.width, frame.texture.height, 3);
+        // GPU 侧预处理：源纹理 → 张量（Sentis 2.6：目标张量尺寸自动决定缩放）
+        var textureTransform = new TextureTransform();
         TextureConverter.ToTensor(frame.texture, _input, textureTransform);
         _worker.Schedule(_input);
 

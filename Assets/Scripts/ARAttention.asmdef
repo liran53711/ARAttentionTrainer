@@ -2,7 +2,8 @@
     "name": "ARAttention",
     "rootNamespace": "",
     "references": [
-        "Unity.InferenceEngine"
+        "Unity.InferenceEngine",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

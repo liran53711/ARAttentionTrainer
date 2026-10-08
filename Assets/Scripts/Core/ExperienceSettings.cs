@@ -29,4 +29,26 @@ public class ExperienceSettings : ScriptableObject
     [Header("调试")]
     public bool drawDetectionBoxes = true;
     public bool showFpsHud = true;
+
+    [Header("M3 交互参数（设计文档 §3.2/§3.3）")]
+    [Tooltip("开始注视：连续看这么久才触发'隐藏'")]
+    public float gazeStartSeconds = 0.8f;
+
+    [Tooltip("注视达成：累计到这么久才算'完成注视'（可给反馈）")]
+    public float gazeSustainSeconds = 2.0f;
+
+    [Tooltip("注视判定：目标离屏幕中心多近算'在看'（视口半径）")]
+    public float gazeViewportRadius = 0.28f;
+
+    [Tooltip("重新引导冷却：两次引导出现的最小间隔")]
+    public float reGuideCooldownSeconds = 3f;
+
+    [Tooltip("反馈动画时长")]
+    public float feedbackDurationSeconds = 2f;
+
+    [Tooltip("老师没讲话这么久 → 回待机")]
+    public float idleTimeoutSeconds = 10f;
+
+    [Tooltip("训练日志采样间隔（秒）")]
+    public float logSampleEverySeconds = 2f;
 }
