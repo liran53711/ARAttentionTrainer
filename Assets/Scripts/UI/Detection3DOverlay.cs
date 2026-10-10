@@ -74,8 +74,10 @@ public class Detection3DOverlay : MonoBehaviour
             float hPx = b.height * texH;
             if (hPx < 4f) continue;
 
-            // 归一化框(左上原点) → 视口坐标(左下原点)
-            var center01 = new Vector2(b.x + b.width * 0.5f, 1f - (b.y + b.height * 0.5f));
+            // 归一化框(左上原点) → 视口坐标（★实测修正 2026-10-10：
+            // PCA 的 ViewportPointToRay 采用"左上原点"视口约定，与检测框一致，直接传，勿翻转！
+            // 之前做了 Unity 式 y 翻转 → 射线上下颠倒 → 框/精灵画到人脚下）
+            var center01 = new Vector2(b.x + b.width * 0.5f, b.y + b.height * 0.5f);
 
             // 帧同步位姿反投影
             var ray = _camera.ViewportPointToRay(center01, frame.cameraPose);

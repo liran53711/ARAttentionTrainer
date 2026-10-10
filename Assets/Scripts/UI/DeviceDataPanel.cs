@@ -11,6 +11,7 @@ public class DeviceDataPanel : MonoBehaviour
     public FaceDetector detector;
     public MicVadService vad;
     public M3DebugDriver driver;
+    public MrukBootstrap mruk;    // 空间数据状态（未就绪时显示一行提示）
     public Text text;
 
     float _timer;
@@ -42,6 +43,9 @@ public class DeviceDataPanel : MonoBehaviour
         {
             _sb.Append("VAD --");
         }
+
+        if (mruk != null && !mruk.HasRoomData)
+            _sb.Append('\n').Append("空间 ").Append(mruk.Summary);
 
         text.text = _sb.ToString();
     }

@@ -27,6 +27,17 @@ public static class MRProjectSetup
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
         Debug.Log("[MRSetup] 目标架构：ARM64");
 
+        // 2.5) 空间锚点/Scene 支持（MRUK 空间数据所需；生成旧命名空间权限 + 运行时能力声明）
+        //     新命名空间 horizonos.permission.USE_ANCHOR_API 由 AndroidManifestPatcher 构建后补齐
+        cfg.anchorSupport = OVRProjectConfig.AnchorSupport.Enabled;
+        cfg.sceneSupport = OVRProjectConfig.FeatureSupport.Supported;
+        OVRProjectConfig.CommitProjectConfig(cfg);
+        Debug.Log("[MRSetup] 空间支持：Anchor=Enabled, Scene=Supported");
+
+        // 2.6) 立体渲染 = SinglePass/Multiview（Depth API 前置条件，也是 Quest 性能最佳实践）
+        PlayerSettings.stereoRenderingPath = StereoRenderingPath.SinglePass;
+        Debug.Log("[MRSetup] 立体渲染：SinglePass（Multiview）");
+
         // 3) MR 推荐：关闭启动闪屏（否则启动画面黑底与透视背景不一致）
         PlayerSettings.virtualRealitySplashScreen = null;
         PlayerSettings.SplashScreen.show = false;

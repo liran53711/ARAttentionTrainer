@@ -85,18 +85,19 @@ PCA相机帧 ─► FaceDetector(隔帧推理) ─► TargetTracker(深度射线
 ### 3.1 状态定义与转换
 
 ```
-待机 ──(讲话中 且 锚点有效 且 未注视)──► 引导
+待机 ──(讲话中 且 未注视)──► 引导                      [吸引模式：可无锚点]
 引导 ──(孩子开始注视：头姿朝向达标 ≥0.8s)──► 隐藏
 隐藏 ──(孩子又看别处 且 讲话继续；冷却≥3s)──► 引导     [温和重新引导]
 隐藏 ──(注视持续累积 ≥2s 且 讲话结束)──► 反馈
 反馈 ──(播放2s 后)──► 待机/引导                        [冷却≥2s]
 任意状态 ──(老师长时间不说话≥10s / 摘头显 / 暂停)──► 待机
+隐藏/反馈 ──(锚点失效)──► 待机
 ```
 
 | 状态 | 进入条件 | 行为 | 退出条件 |
 |------|---------|------|---------|
-| **待机 Idle** | 初始 / 退出其它态 | 无引导；精灵消失 | 讲话中+锚点有效+未注视 |
-| **引导 Guiding** | 讲话中 且 未注视 且 锚点有效 | 精灵渐入(0.5s)→从老师方位跑动至老师头旁(约1.2s)；同步空间音效 | 开始注视(≥0.8s) → 隐藏 |
+| **待机 Idle** | 初始 / 退出其它态 | 无引导；精灵消失 | 讲话中+未注视（锚点可选——还没检测到人也先引导"四处找"） |
+| **引导 Guiding** | 讲话中 且 未注视 | 精灵渐入(0.5s)→出现在视野中央 →检测到人后跑动至老师头旁(约1.2s)；同步空间音效；**无锚点时留在中央吸引（吸引模式）** | 开始注视(≥0.8s) → 隐藏 |
 | **隐藏 Hidden** | 开始注视 | 精灵渐隐(1s)并"躲"到老师头后；**注意力交付给人脸** | ①注视累积≥2s 且 讲话结束 → 反馈；②看别处且讲话继续 → 引导 |
 | **反馈 Feedback** | 注视达成+讲话结束 | 精灵从老师头后随机方位(左/右/头顶)重现 + 音效 + 闪光，约2s | 2s 后回待机/引导 |
 | **暂停 Paused** | 摘下头显/手动暂停 | 停止一切输出，记录暂停点 | 恢复 |
@@ -104,6 +105,8 @@ PCA相机帧 ─► FaceDetector(隔帧推理) ─► TargetTracker(深度射线
 > 📌 **与中期答辩PPT的差异（答辩口径需同步更新）**：
 > ① 隐藏触发从"人脸进入视野"改为"孩子开始注视"（更符合"隐藏=交付注意力"的逻辑）；
 > ② 注视判断为头姿代理（无眼动追踪），论文中需说明该近似及其局限。
+>
+> 📌 **2026-10-10 修正（对齐最终版 PPT 三阶段设计 + 用户实测反馈）**：引导入口**放开"锚点有效"要求**（吸引模式）——孩子没看人/还没找到人时精灵先出现在视野中央"带孩子四处找"，检测到人后再跑向人；仅隐藏/反馈在锚点失效时回待机（此前"必须先锁目标才能引导"会把孩子扭开头时的引导直接掐死，实测确认错过引导时机）。
 
 ### 3.2 判断量的精确定义（全部参数在 ExperienceSettings 可调）
 
@@ -172,6 +175,13 @@ ExperienceSettings）。实现位置：M3DebugDriver 的 IP 动画层（不改�
 - **URP Unlit 的纹理属性是 `_BaseMap`**：PCA 默认写 `_MainTex` 在 URP 中不生效 → 监视器面板纯白。`DeviceSceneCreator` 已设 `TexturePropertyName = "_BaseMap"`
 - **必须显式提交透视图层（M1 最终修复项，最关键）**：仅有"透明背景 + isInsightPassthroughEnabled"不够——合成器日志 `PT is: ON numLayers: 0`（应用没有提交任何透视图层）时系统会把透视渲染整个熄掉（`renderIteration: PT is: OFF`）→ 眼缓冲透明区露出的是虚无（黑）。修复：场景中挂 **`OVRPassthroughLayer`** 组件（向合成器提交 Underlay 层），M1 随即验收通过
 - 排查依据：`adb logcat` 里 `[Insight MR] Successfully initialized passthrough`（初始化成功）+ `MRUK Shared: Camera started`（相机在流）+ 采样日志 `targetValid=1`（检测链路全通）——三链路各自独立验证，把问题精确定位到"渲染合成"层
+- **PCA `ViewportPointToRay` 的视口约定是"左上原点"**（与检测框归一化坐标一致）——**不要做 Unity 式 y 翻转**，翻转会让射线上下颠倒、精灵/检测框全部画到人脚下方向（2026-10-10 由 `[IP]` 日志实锤：目标在画面上方却算出 -20° 向下的射线）。修复：直接传归一化坐标
+- **语音指导（2026-10-10 新增）**：Quest 无系统 TTS 引擎（实测 `tts_default_synth`=null）→ 用 edge-tts 预生成语音随包发布：引导"看这里呀"/吸引模式"看看老师在哪儿呀"/反馈"太棒啦"/探头"我在这儿"；`VoiceCuePlayer` 支持空间定位（声音从精灵方位传来）与档位音量联动；**后续真人录音同名替换文件即可，代码零改动**
+- **空间数据（MRUK，2026-10-10 新增，用户建议）**：`PermissionFlow` 加回 **Scene 权限**；`MrukBootstrap` 启动时 `LoadSceneFromDevice`（已存数据秒载；无数据触发系统空间设置流程），记录房间数 / 地板高度 / 锚点数——为"MRUK 环境射线实测距离"（§4.3 主路径）与"3D 精灵房间锚定定位"铺垫。前提：头显完成过一次空间设置
+- **人体轮廓分割（2026-10-10 新增，用户定调）**：MediaPipe Selfie Segmentation（462KB）——**实测推理 27–42ms**（远快于预算）；关键坑：模型需要 [-1,1] 输入而 Unity 管线给 [0,1] → 已向 ONNX **注入 `2x-1` 归一化节点**（零运行时改动）。`SelfieSegRunner`（0.5s 节流）+ 轮廓边缘提取 → 陪伴模式精灵贴真实轮廓；**"精灵被真人遮挡"效果已具备速度条件（下一步）**
+- **A·遮挡"躲到人后"（2026-10-10 深夜，用户定调 ABC 全量）**：`MaskOccluder` 全屏擦除板——解析计算 屏幕UV↔PCA掩码UV 的 3×3 单应（两次针孔投影复合，`ComputeRows` 已被 3 项单测锁死；推导中修正两处符号/比例错误）；着色器 `ARAttention/MaskErase` 以 `Blend Zero OneMinusSrcAlpha` 在人体轮廓内把已绘制的精灵/画线擦除。已知取舍：屏幕空间不辨深度——数据面板若被真人"挡在后面"也会被擦（v1 接受，后续可按面板区域豁免）
+- **B·环境射线实测距离（同夜）**：`EnvironmentRaycastManager` 射线（MRUK 深度）优先、身高公式回退——空间数据就绪后自动启用，框/精灵距离更准
+- **C·3D 接入框架（同夜）**：`IPWorldView.model3D + animator`（Animator 参数名=需求文档动画名：`Flying/Companion/Appear/Feedback/Peek`；无 Animator 时程序化起伏）；场景内置"胶囊+双眼"3D 占位体先验证**定位/面朝用户/动画状态转发**——组员正式模型到位后替换一个引用即接管
 
 ### 4.2 人脸检测（Sentis + YOLOv9）
 - 预处理照官方样例：`TextureConverter.ToTensor(tex, tensor, new TextureTransform().SetDimensions(w,h,3))`（GPU侧）→ `worker.Schedule` → `((Tensor<float>)worker.PeekOutput(0)).ReadbackAndCloneAsync()`（**禁用阻塞版 ReadbackAndClone**）
@@ -187,6 +197,7 @@ ExperienceSettings）。实现位置：M3DebugDriver 的 IP 动画层（不改�
 1. **M3 起步（零成本，优先做）**：用"人框的上部中心"作为头部/面部位置的启发式——取框顶部往下约 25% 高度的水平中心点。引导目标、躲藏位、方向锚全部使用该点。
 2. **增强步骤（M3 之后视时间）**：替换为**人脸专用模型**（首选 BlazeFace——Unity 官方 Sentis 示例自带；备选 YuNet/MIT）。架构已为模型替换做好准备：`DetectionResult` 与具体模型解耦，仅需新增一个解析分支 + 换模型资产。
 3. **实例分割（2026-10-10 用户定调为最终目标之一）**：人/脸轮廓分割，让虚拟精灵与真实人脸"贴合"（沿轮廓探头、躲藏、轮廓发光等）。首选 **YOLOv9-seg**（与现检测器同族，Sentis 兼容性好、接口改动最小）。下游演进：`DetectionResult` 增加**可选 mask 字段**（默认无，现有管线不受影响）；`IPWorldView` 后续按轮廓计算遮挡与探头位。
+   > **实现（2026-10-10 晚）**：改选 **MediaPipe Selfie Segmentation**（onnx-community 版，462KB；ONNX 输入 1×3×144×256 → 输出 1×1×144×256 alpha 掩码；Apache-2.0）。原因：YOLOv9-c-seg（27M 参数）在 Quest CPU 预计 0.5–1s/帧，且其公开导出版含 TensorRT 插件节点、Sentis 无法导入；**1对1训练场景下"整体人体轮廓"与实例分割效果等效、快约 20 倍**。管线：`SelfieSegRunner`（0.5s 节流推理 + 掩码）→ `TryGetEdgeStatic`（轮廓边缘提取，4 项单测覆盖）→ `IPWorldView` 陪伴模式沿真实轮廓边缘贴合。**最终形态**：掩码进渲染管线做深度遮罩（精灵被真人部分遮挡的"躲到人后"效果）——待真机测速后推进。
 4. **"识别特定的人"（结题增强 / 论文展望，不入 MVP）**：三条路线——①空间锁定（1对1对坐场景 = 最大最居中 + 时序滞回，M3 已规划）；②外观记忆（颜色特征找回，行为上近似"认识"）；③真实人脸识别（embedding + 预录入照片；涉及儿童隐私与伦理，列入 Future Work）。
 
 ### 4.3 人脸 3D 位置估计（"空间粗定位 + 视觉精定位"）
@@ -308,3 +319,30 @@ ExperienceSettings）。实现位置：M3DebugDriver 的 IP 动画层（不改�
   - `D:\大创\CCAssistant\开发调研\2026-10-07_调研C_空间锚定与音频.md`
 - 官方蓝本：https://github.com/oculus-samples/Unity-PassthroughCameraApiSamples
 - 关键 API：`PassthroughCameraAccess.GetTexture()/GetCameraPose()/ViewportPointToRay()`；`OVRPermissionsRequester.Request()`；`EnvironmentRaycastManager.Raycast()`；`TextureConverter.ToTensor()`
+
+---
+
+## 12. 2026-10-11 迭代记录：火柴人占位 + 移动逻辑平滑（用户定调）
+
+**背景（用户真机反馈）**：ABC 验收后反馈——"抖动、小人动作太快会闪现、没有遮挡效果"；拍板：**遮挡难做就不要了**；目标对齐 Horizon 商店精品 MR（参考 Meta《First Encounters》）："模型位置相对稳定（空间定位）+ 移动逻辑合理"；要求先搭**火柴人**作为给组员建模预留的接口，**重点做移动逻辑的平滑**。
+
+### 12.1 抖动/闪现的根因与修复
+| 根因 | 修复 |
+|---|---|
+| 世界位置在检测批次（~5Hz）离散重建 → 瞬跳 | `IPWorldView` 增加**连续追赶**：渲染位置每帧 `SmoothDamp`（tc=0.17s，限速 2.5m/s）趋近锚点；>1.2m 视为重生直接吸附 |
+| 目标短暂丢失 → 目标点回退屏幕中央（闪回中间再飞回） | `TargetOrCenter` 目标保持：丢失 <2.5s 保持最后位置 |
+| 陪伴换边左右瞬移 | `_companionSideSmooth` 平滑滑过人脸（tc=0.45s） |
+| 反馈/探头从当前位置瞬移 | 改为 0.35s/0.3s smoothstep **飞入**（从当前位到目标位） |
+| 检测框逐帧抖动 | 视口层 `SmoothTarget`（tc=0.15s）+ 世界层追赶，双道平滑 |
+| 姿态/透明度瞬变 | `StickFigureIp` 关节角度 SmoothDamp 混合（tc=0.18s）；透明度=材质 alpha 平滑（不 SetActive 闪现）；引导↔companion 状态 0.18s 去抖 |
+| 动作频率过快（脉冲 10rad/s 等） | 全面降频：起伏 0.2~0.6Hz，反馈脉冲 4.5rad/s |
+
+### 12.2 空间定位感（房间围栏）
+- `MrukBootstrap.TryGetRoomBounds()`（世界坐标，含地板/天花板）→ `IPWorldView.ClampToRoom`（纯函数，单测锁死）：x/z 留 0.35m 边距，y∈[地板+0.45, 天花板−0.35]；**锚定规则**：目标有效=跟随；丢失=冻结（不随头转漂移）；从未锁过目标=吸引模式跟随；陪伴=贴轮廓。
+
+### 12.3 火柴人接口（IP_Model3D）
+- `StickFigureIp.cs`：运行时程序化搭建（头/躯干/双臂/双腿 + 双眼），原生身高 1m；各状态姿态语言（飞行前倾/陪伴招手/登场举手/反馈欢呼/探头侧倾）；作为组员 FBX 的**接口对照**。
+- `IPWorldView.modelNativeHeight`：模型按 `baseWorldSize/modelNativeHeight` 归一缩放——FBX 按真实米制建模，无需改源文件尺寸。
+
+### 12.4 遮挡（A 项）状态
+- 用户定调"难做就不要了" → `DeviceSceneCreator.EnableOcclusion=false`（默认不生成 MaskOccluder 节点）；`MaskOccluder.cs`/`MaskErase.shader`/单测保留，随时可开关回来。

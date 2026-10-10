@@ -118,9 +118,13 @@ public class InteractionStateMachine
         GuideTriggered = false;
         FeedbackTriggered = false;
 
-        if (!input.targetValid)
+        // 锚点失效的处置（2026-10-10 按 PPT 三阶段设计修正）：
+        //   · 待机/引导 允许"无锚点"——这是"吸引模式"：孩子没看人/还没看到人时，
+        //     精灵先出现在视野中央带孩子四处找（PPT 阶段一：出现在视野中央→向讲话者跑动）
+        //   · 隐藏/反馈 在锚点失效时一律回待机（注意力无处交付、跟踪已失）
+        if (!input.targetValid && State != InteractionState.Idle && State != InteractionState.Guiding)
         {
-            if (State != InteractionState.Idle) GoTo(InteractionState.Idle);
+            GoTo(InteractionState.Idle);
             return;
         }
 

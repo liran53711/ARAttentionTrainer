@@ -18,6 +18,9 @@ public class FaceDetector : MonoBehaviour
     /// <summary>最新一次检测结果（归一化框、左上角原点；仅含 person）。</summary>
     public List<DetectionResult> Latest { get; private set; } = new();
 
+    /// <summary>检测批次版本号：每完成一次推理+后处理自增（下游用于"仅在有新结果时重建世界位置"）。</summary>
+    public int Version { get; private set; }
+
     /// <summary>最近一次"预处理+推理+回读"总耗时（毫秒），用于性能记录。</summary>
     public float LastInferenceMs { get; private set; }
 
@@ -98,7 +101,7 @@ public class FaceDetector : MonoBehaviour
         using var boxes = boxesAwaiter.GetResult();
         using var classIds = classIdsAwaiter.GetResult();
         using var scores = scoresAwaiter.GetResult();
-        if (boxes.shape[0] == 0) { Latest = new List<DetectionResult>(); LastInferenceMs = (Time.realtimeSinceStartup - t0) * 1000f; yield break; }
+        if (boxes.shape[0] == 0) { Latest = new List<DetectionResult>(); Version++; LastInferenceMs = (Time.realtimeSinceStartup - t0) * 1000f; yield break; }
 
         // 解析 → 只留 person（classId 0）→ 置信度过滤 + NMS
         var raw = new List<DetectionResult>();
@@ -119,6 +122,7 @@ public class FaceDetector : MonoBehaviour
 
         float confThreshold = settings != null ? settings.detectionConfThreshold : 0.35f;
         Latest = DetectionPostprocess.NMS(raw, confThreshold, IouThreshold);
+        Version++;
 
         LastInferenceMs = (Time.realtimeSinceStartup - t0) * 1000f;
     }

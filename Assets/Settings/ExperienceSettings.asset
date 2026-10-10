@@ -34,3 +34,4 @@ MonoBehaviour:
   ipSizeFactor: 1
   cueVolumeScale: 1
   micFallbackFeedbackGazeSeconds: 5
+  startupAttractionSeconds: 25

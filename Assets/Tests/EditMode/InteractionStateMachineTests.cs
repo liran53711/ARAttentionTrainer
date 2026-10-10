@@ -70,11 +70,23 @@ public class InteractionStateMachineTests
     }
 
     [Test]
-    public void Guiding_ToIdle_OnTargetLost()
+    public void Guiding_StaysInAttractionMode_OnTargetLost()
     {
+        // 2026-10-10 语义修正（PPT 三阶段）：引导中目标丢失 → 精灵留在中央继续吸引孩子找人，
+        // 不再被踢回待机（此前行为会在孩子扭开头时立刻熄火）
         var m = ToGuiding();
+        TickN(m, I(true, false, target: false), 30); // 1 秒无锚点（未到静默超时）
+        Assert.AreEqual(InteractionState.Guiding, m.State);
+    }
+
+    [Test]
+    public void Idle_Guides_WithoutTarget_AttractionMode()
+    {
+        // PPT 阶段一：对方在讲话 + 孩子没看人（还没检测到人也要先出现引导"四处找"）
+        var m = new InteractionStateMachine();
         m.Tick(I(true, false, target: false));
-        Assert.AreEqual(InteractionState.Idle, m.State);
+        Assert.AreEqual(InteractionState.Guiding, m.State);
+        Assert.IsTrue(m.GuideTriggered);
     }
 
     [Test]

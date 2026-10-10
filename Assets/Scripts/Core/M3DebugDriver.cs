@@ -13,6 +13,7 @@ public class M3DebugDriver : MonoBehaviour
     public IPDebugView ipView;          // 电脑端（OnGUI）
     public IPWorldView ipWorldView;     // 真机（世界空间）——两者二选一
     public AudioCuePlayer audioPlayer;
+    public VoiceCuePlayer voiceCue;     // 语音指导（真机；片段缺失时静默跳过）
     public MicVadService vadService;
 
     [Header("模拟模式（电脑端）")]
@@ -43,15 +44,35 @@ public class M3DebugDriver : MonoBehaviour
     bool _simLooking;             // K 键：模拟"孩子在注视"
     bool _fallbackFired;          // 麦克风降级：本轮 Hidden 已用替代规则触发过反馈
     bool _micFallbackLogged;      // 降级事件每会话只记一次
+    bool _everHadTarget;          // 本会话是否曾锁定过目标（开场吸引的结束条件）
+    bool _startupAttractLogged;
 
     // IP 动画运行时
-    enum IpAnim { Hidden, Appearing, GuidingMove, Hiding, FeedbackPulse, Peek }
+    // Companion（陪伴）= 用户定调 2026-10-10："精灵不允许消失，要和人脸互动"：
+    // 注视达成后不再渐隐，而是落到脸旁轻轻起伏、每隔几秒换一边（与人脸"作伴"）
+    enum IpAnim { Hidden, Appearing, GuidingMove, Companion, FeedbackPulse, Peek }
     IpAnim _ipAnim = IpAnim.Hidden;
     float _ipAnimT;
     Vector2 _ipFrom = new Vector2(0.5f, 0.5f);
     Vector2 _ipPos = new Vector2(0.5f, 0.5f);
     float _ipAlpha;
     float _ipScale = 1f;
+    float _companionSide = 1f;       // 陪伴位置：左(-1)/右(+1)脸旁
+    float _companionSwitchT;         // 下一次换边倒计时
+    float _companionSideSmooth = 1f; // 平滑后的方位——换边"滑过去"而不是瞬移（2026-10-11 防闪现）
+    float _companionSideVel;
+
+    // 目标保持（2026-10-11 防闪现）：检测短暂丢失时保持最后位置，
+    // 避免 TargetOrCenter 立刻回退屏幕中央造成"人一抖精灵就闪回中间再飞回来"
+    Vector2 _heldTargetPos = new Vector2(0.5f, 0.5f);
+    bool _hasHeldTarget;
+    float _heldTargetTime;
+    // 视口目标平滑追赶：吸收检测框逐帧抖动（世界层还有第二道平滑）
+    Vector2 _smoothTarget = new Vector2(0.5f, 0.5f);
+    Vector2 _smoothTargetVel;
+    // 反馈/探头"飞入"起点终点（从当前位置平滑飞过去，不瞬移）
+    Vector2 _ipDest;
+    bool _everShown;
 
     float _sampleTimer;
     float _fpsSmooth = 60f;
@@ -73,6 +94,7 @@ public class M3DebugDriver : MonoBehaviour
         CreateLogger();
         _logger.LogEvent("SessionStart");
         if (audioPlayer != null) audioPlayer.SetVolume(settings != null ? settings.cueVolumeScale : 0.6f);
+        if (voiceCue != null) voiceCue.SetVolume(settings != null ? settings.cueVolumeScale : 0.9f);
         Debug.Log($"[M3] 会话数据目录：{_logger.SessionDir}");
         Debug.Log($"[M3] 干预档位：{LevelName}（gazeStart {settings?.gazeStartSeconds:0.0}s / 冷却 {settings?.reGuideCooldownSeconds:0.0}s / Peek {settings?.peekIntervalSeconds:0.0}s）");
         string speechMode = (useMicVad && vadService != null)
@@ -95,6 +117,7 @@ public class M3DebugDriver : MonoBehaviour
         if (_gaze != null) _gaze.StartSeconds = settings.gazeStartSeconds;
         if (_sm != null) _sm.ReGuideCooldownSeconds = settings.reGuideCooldownSeconds;
         if (audioPlayer != null) audioPlayer.SetVolume(settings.cueVolumeScale);
+        if (voiceCue != null) voiceCue.SetVolume(settings.cueVolumeScale);
         _logger?.LogEvent("LevelChange", settings.CurrentLevelName);
         Debug.Log($"[M3] 干预档位 → {settings.CurrentLevelName}" +
                   $"（gazeStart {settings.gazeStartSeconds:0.0}s / 冷却 {settings.reGuideCooldownSeconds:0.0}s / Peek {settings.peekIntervalSeconds:0.0}s）");
@@ -153,6 +176,18 @@ public class M3DebugDriver : MonoBehaviour
         // ── 跟踪（选目标 + 头部点 + 滤波）──
         var detections = detector != null ? detector.Latest : EmptyDetections;
         var snapshot = _tracker.Tick(detections, dt);
+        if (snapshot.valid) _everHadTarget = true;
+
+        // ── 开场吸引（用户定调）：启动即引导，不等讲话；直到首次锁到目标或超时 ──
+        bool startupAttraction = !_everHadTarget
+                                 && settings != null
+                                 && settings.startupAttractionSeconds > 0f
+                                 && _logger.NowSeconds < settings.startupAttractionSeconds;
+        if (startupAttraction && !_startupAttractLogged)
+        {
+            _startupAttractLogged = true;
+            Debug.Log("[M3] 开场吸引：启动即引导（无需讲话）——带孩子找老师中…");
+        }
 
         if (_prevTargetValid && !snapshot.valid) _logger.LogEvent("TargetLost");
         if (!_prevTargetValid && snapshot.valid) _logger.LogEvent("TargetAcquired");
@@ -180,7 +215,7 @@ public class M3DebugDriver : MonoBehaviour
         // ── 状态机 ──
         _sm.Tick(new InteractionInputs
         {
-            speaking = _speaking,
+            speaking = _speaking || startupAttraction,
             speechJustEnded = speechEnded,
             looking = looking,
             gazeStarted = _gaze.GazeStarted,
@@ -204,6 +239,8 @@ public class M3DebugDriver : MonoBehaviour
         {
             _logger.LogEvent("GuideStart", _simLooking ? "sim" : "auto");
             audioPlayer?.PlayCue(AudioCue.GuideAppear);
+            // 吸引模式（还没找到人）说"看看老师在哪儿呀"，正常引导说"看这里呀"
+            voiceCue?.Play(snapshot.valid ? VoiceCue.GuideAppear : VoiceCue.Find, IpVoicePos());
             StartIpAppear();
             Debug.Log("[M3] 引导出现 → IP 登场");
         }
@@ -213,6 +250,7 @@ public class M3DebugDriver : MonoBehaviour
         {
             _logger.LogEvent("Feedback");
             audioPlayer?.PlayCue(AudioCue.Feedback);
+            voiceCue?.Play(VoiceCue.Feedback, IpVoicePos());
             StartIpFeedback(snapshot);
             Debug.Log("[M3] 正反馈！IP 重现");
         }
@@ -281,93 +319,175 @@ public class M3DebugDriver : MonoBehaviour
             if (snapshot.valid) ipWorldView.height01 = snapshot.boxHeight01;
             ipWorldView.alpha = _ipAlpha; ipWorldView.scale = _ipScale * (settings != null ? settings.ipSizeFactor : 1f);
             ipWorldView.tint = _ipAnim == IpAnim.FeedbackPulse ? new Color(1f, 0.95f, 0.6f) : Color.white;
+            ipWorldView.companionMode = _ipAnim == IpAnim.Companion; // 陪伴 → 贴真实轮廓
+            ipWorldView.sideHint = _companionSide;
+            ipWorldView.targetValid = snapshot.valid; // 锚定规则：有效=跟随；丢失=冻结防漂移
+            ipWorldView.animState = (IPWorldView.IPAnimState)(int)_ipAnim; // C：动画状态转发（枚举顺序一一对应）
         }
     }
 
     void StartIpAppear()
     {
-        _ipFrom = new Vector2(0.5f, 0.5f); // 从视野中央出现
-        _ipPos = _ipFrom;
+        // 首次登场（或重新引导）：从当前位置飞过去（不再瞬移回屏幕中央）
+        _ipFrom = _everShown ? _ipPos : new Vector2(0.5f, 0.5f);
         _ipAnim = IpAnim.Appearing;
-        _ipAnimT = 0f;
-        _ipAlpha = 0f;
-        _ipScale = 0.6f;
-    }
-
-    void StartIpFeedback(TargetSnapshot snapshot)
-    {
-        // 从目标附近的随机方位"探出头来"
-        var basePos = snapshot.valid ? snapshot.headPoint01 : new Vector2(0.5f, 0.5f);
-        float ang = Random.Range(0f, Mathf.PI * 2f);
-        _ipPos = basePos + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * 0.12f;
-        _ipAnim = IpAnim.FeedbackPulse;
-        _ipAnimT = 0f;
-        _ipAlpha = 0f;
-        _ipScale = 0.5f;
-    }
-
-    void StartIpPeek(TargetSnapshot snapshot)
-    {
-        // 从老师头的左/右侧短暂探出头来（不打断注视的"微提示"）
-        var basePos = snapshot.valid ? snapshot.headPoint01 : new Vector2(0.5f, 0.5f);
-        float side = Random.value < 0.5f ? -1f : 1f;
-        _ipPos = basePos + new Vector2(side * 0.10f, Random.Range(-0.05f, 0.02f));
-        _ipAnim = IpAnim.Peek;
         _ipAnimT = 0f;
         _ipScale = 0.7f;
     }
 
-    Vector2 TargetOrCenter(TargetSnapshot s) => s.valid ? s.headPoint01 : new Vector2(0.5f, 0.5f);
+    void StartIpFeedback(TargetSnapshot snapshot)
+    {
+        // 从目标附近的随机方位庆祝：从当前位置"飞过去"（0.35s 飞入在 FeedbackPulse 里完成，不瞬移）
+        var basePos = TargetOrCenter(snapshot);
+        float ang = Random.Range(0f, Mathf.PI * 2f);
+        _ipFrom = _ipPos;
+        _ipDest = basePos + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * 0.12f;
+        _ipAnim = IpAnim.FeedbackPulse;
+        _ipAnimT = 0f;
+        _ipScale = 0.8f;
+    }
+
+    void StartIpPeek(TargetSnapshot snapshot)
+    {
+        // 从老师头旁随机位置探头（PPT 设计：左/右/头顶，每次不同）——从当前位置飞过去
+        var basePos = TargetOrCenter(snapshot);
+        int pick = Random.Range(0, 3);
+        if (pick == 0) _ipDest = basePos + new Vector2(-0.10f, Random.Range(-0.05f, 0.02f));      // 左侧
+        else if (pick == 1) _ipDest = basePos + new Vector2(0.10f, Random.Range(-0.05f, 0.02f));  // 右侧
+        else _ipDest = basePos + new Vector2(Random.Range(-0.04f, 0.04f), -0.10f);               // 头顶（y01 减小=更上方）
+        _ipFrom = _ipPos;
+        _ipAnim = IpAnim.Peek;
+        _ipAnimT = 0f;
+        _ipScale = 0.85f;
+        voiceCue?.Play(VoiceCue.Peek, IpVoicePos());
+    }
+
+    Vector3 IpVoicePos() => ipWorldView != null ? ipWorldView.CurrentWorldPos : transform.position;
+
+    /// <summary>目标点：有效→刷新保持值；短暂丢失（&lt;2.5s）→保持最后位置（防闪回中央）；彻底无目标→视野中央。</summary>
+    Vector2 TargetOrCenter(TargetSnapshot s)
+    {
+        if (s.valid)
+        {
+            _heldTargetPos = s.headPoint01;
+            _hasHeldTarget = true;
+            _heldTargetTime = Time.time;
+            return _heldTargetPos;
+        }
+        if (_hasHeldTarget && Time.time - _heldTargetTime < 2.5f) return _heldTargetPos;
+        return new Vector2(0.5f, 0.5f);
+    }
+
+    /// <summary>平滑追赶后的目标（所有动画状态统一用它，吸收检测抖动）。大跨度（重锁）直接吸附防长距离飞行。</summary>
+    Vector2 SmoothTarget(TargetSnapshot s)
+    {
+        var raw = TargetOrCenter(s);
+        if (Vector2.Distance(_smoothTarget, raw) > 0.4f)
+        {
+            _smoothTarget = raw;
+            _smoothTargetVel = Vector2.zero;
+        }
+        else
+        {
+            _smoothTarget = Vector2.SmoothDamp(_smoothTarget, raw, ref _smoothTargetVel, 0.15f, 20f, Time.deltaTime);
+        }
+        return _smoothTarget;
+    }
 
     void UpdateIpAnim(float dt, TargetSnapshot snapshot)
     {
         _ipAnimT += dt;
+        if (_ipAnim != IpAnim.Hidden) _everShown = true;
+        Vector2 tgt = SmoothTarget(snapshot); // 每帧刷新（先于各状态使用）
+        // 陪伴换边：方位平滑滑过去（不再左右瞬移）
+        _companionSideSmooth = Mathf.SmoothDamp(_companionSideSmooth, _companionSide, ref _companionSideVel, 0.45f, 20f, dt);
         switch (_ipAnim)
         {
             case IpAnim.Appearing: // 0.5s 渐入，同时向目标移动（共 1.2s）
             {
                 float k = Mathf.Clamp01(_ipAnimT / 0.5f);
-                _ipAlpha = k;
-                _ipScale = Mathf.Lerp(0.6f, 1f, k);
-                _ipPos = Vector2.Lerp(_ipFrom, TargetOrCenter(snapshot) + new Vector2(0f, -0.06f),
+                _ipAlpha = Mathf.MoveTowards(_ipAlpha, 1f, dt * 4f); // 平滑渐入（不瞬变）
+                _ipScale = Mathf.Lerp(0.65f, 1f, k * k * (3f - 2f * k)); // smoothstep 缓入缓出
+                _ipPos = Vector2.Lerp(_ipFrom, tgt + new Vector2(0f, -0.06f),
                     Mathf.Clamp01(_ipAnimT / 1.2f));
                 if (_ipAnimT >= 1.2f) { _ipAnim = IpAnim.GuidingMove; _ipAnimT = 0f; }
                 break;
             }
             case IpAnim.GuidingMove: // 悬浮在目标上方，轻微起伏
-                _ipPos = TargetOrCenter(snapshot) + new Vector2(0f, -0.06f + Mathf.Sin(Time.time * 3f) * 0.012f);
+                _ipPos = tgt + new Vector2(0f, -0.06f + Mathf.Sin(Time.time * 1.9f) * 0.010f);
                 _ipAlpha = 1f;
                 _ipScale = 1f;
-                if (_sm.State != InteractionState.Guiding) // 离开引导 → 开始隐藏
+                if (_sm.State != InteractionState.Guiding) // 离开引导 → 进入"陪伴模式"（不消失）
                 {
-                    _ipAnim = IpAnim.Hiding;
+                    _ipAnim = IpAnim.Companion;
                     _ipAnimT = 0f;
-                    audioPlayer?.PlayCue(AudioCue.Hide);
+                    _companionSide = Random.value < 0.5f ? -1f : 1f;
+                    _companionSwitchT = Random.Range(3f, 6f);
+                    voiceCue?.Play(VoiceCue.Peek, IpVoicePos()); // “我在这儿”～落到脸旁
                 }
                 break;
-            case IpAnim.Hiding: // 1s 渐隐（"躲起来"，注意力交付给人脸）
-                _ipAlpha = 1f - Mathf.Clamp01(_ipAnimT / 1f);
-                if (_ipAnimT >= 1f) { _ipAnim = IpAnim.Hidden; _ipAlpha = 0f; }
-                break;
-            case IpAnim.FeedbackPulse: // 闪现 + 脉冲
+            case IpAnim.Companion: // 陪伴：趴在脸旁轻轻起伏，每隔几秒换一边（滑过去，不瞬移）
             {
-                float appear = Mathf.Clamp01(_ipAnimT / 0.15f);
-                _ipAlpha = appear;
-                _ipScale = 0.5f + 0.5f * appear + 0.15f * Mathf.Sin(_ipAnimT * 10f) * appear;
-                float dur = settings != null ? settings.feedbackDurationSeconds : 2f;
-                if (_ipAnimT >= dur) { _ipAnim = IpAnim.Hidden; _ipAlpha = 0f; }
+                _companionSwitchT -= dt;
+                if (_companionSwitchT <= 0f)
+                {
+                    _companionSwitchT = Random.Range(4f, 8f);
+                    _companionSide = -_companionSide;
+                }
+                _ipPos = tgt + new Vector2(
+                    _companionSideSmooth * 0.115f,
+                    -0.035f + Mathf.Sin(Time.time * 1.35f) * 0.009f);
+                _ipScale = 0.85f + 0.05f * Mathf.Sin(Time.time * 1.7f);
+                if (_sm.State == InteractionState.Idle)
+                {
+                    // 待机期：有目标（含短暂丢失保持期）则半透明待着（不消失），彻底无目标才淡出
+                    bool targetAlive = snapshot.valid
+                        || (_hasHeldTarget && Time.time - _heldTargetTime < 2.5f);
+                    _ipAlpha = targetAlive
+                        ? Mathf.MoveTowards(_ipAlpha, 0.55f, dt * 0.8f)
+                        : Mathf.MoveTowards(_ipAlpha, 0f, dt * 1.2f);
+                }
+                else
+                {
+                    _ipAlpha = 1f;
+                }
+                if (_sm.State == InteractionState.Guiding) _ipAnim = IpAnim.GuidingMove; // 重新引导 → 回到引导移动
                 break;
             }
-            case IpAnim.Peek: // 短暂探头：0.2s 淡入 → 保持 → 0.25s 淡出（带轻微摆动）
+            case IpAnim.FeedbackPulse: // 从当前位置"飞过去"庆祝（0.35s smoothstep 飞入 + 柔和脉冲；不闪现）
             {
+                float flyT = Mathf.Clamp01(_ipAnimT / 0.35f);
+                float e = flyT * flyT * (3f - 2f * flyT);
+                _ipPos = Vector2.Lerp(_ipFrom, _ipDest, e);
+                _ipAlpha = Mathf.MoveTowards(_ipAlpha, 1f, dt * 6f);
+                _ipScale = Mathf.Lerp(0.8f, 1.05f, e) + 0.04f * Mathf.Sin(_ipAnimT * 4.5f) * e;
+                float dur = settings != null ? settings.feedbackDurationSeconds : 2f;
+                if (_ipAnimT >= dur)
+                {
+                    // 反馈结束 → 回到陪伴（不消失）
+                    _ipAnim = IpAnim.Companion;
+                    _ipAnimT = 0f;
+                    _companionSwitchT = Random.Range(3f, 6f);
+                }
+                break;
+            }
+            case IpAnim.Peek: // 短暂探头：从当前位置飞过去（0.3s），保持，柔出（不瞬间闪现）
+            {
+                float flyT = Mathf.Clamp01(_ipAnimT / 0.3f);
+                float e = flyT * flyT * (3f - 2f * flyT);
+                _ipPos = Vector2.Lerp(_ipFrom, _ipDest, e);
                 float dur = settings != null ? settings.peekDurationSeconds : 0.8f;
-                const float fadeIn = 0.2f, fadeOut = 0.25f;
                 float t = _ipAnimT;
-                if (t < fadeIn) _ipAlpha = t / fadeIn;
-                else if (t < dur - fadeOut) _ipAlpha = 1f;
-                else _ipAlpha = Mathf.Clamp01((dur - t) / fadeOut);
-                _ipScale = Mathf.Lerp(0.75f, 0.95f, Mathf.PingPong(t * 1.2f, 1f));
-                if (t >= dur) { _ipAnim = IpAnim.Hidden; _ipAlpha = 0f; }
+                float targetAlpha = t < dur - 0.25f ? 1f : 0f;
+                _ipAlpha = Mathf.MoveTowards(_ipAlpha, targetAlpha, dt * 4.5f);
+                _ipScale = Mathf.Lerp(0.85f, 1f, e);
+                if (t >= dur)
+                {
+                    // 探头结束 → 回到陪伴（不消失）
+                    _ipAnim = IpAnim.Companion;
+                    _ipAnimT = 0f;
+                    _companionSwitchT = Random.Range(3f, 6f);
+                }
                 break;
             }
             case IpAnim.Hidden:
@@ -387,6 +507,14 @@ public class M3DebugDriver : MonoBehaviour
         _ipAnim = IpAnim.Hidden;
         _ipAlpha = 0f;
         _prevTargetValid = false;
+        _everHadTarget = false;
+        _startupAttractLogged = false;
+        _hasHeldTarget = false;
+        _smoothTarget = new Vector2(0.5f, 0.5f);
+        _smoothTargetVel = Vector2.zero;
+        _companionSideSmooth = _companionSide;
+        _companionSideVel = 0f;
+        _everShown = false;
         Debug.Log($"[M3] 会话已重置：{_logger.SessionDir}");
     }
 

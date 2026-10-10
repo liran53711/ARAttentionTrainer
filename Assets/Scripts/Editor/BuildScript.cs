@@ -90,13 +90,27 @@ public static class BuildScript
         EditorApplication.Exit(report.summary.result == BuildResult.Succeeded ? 0 : 1);
     }
 
-    /// <summary>把 Android 工具链路径显式写进编辑器偏好（batchmode 下自带 JDK 检测会失灵）。</summary>
+    /// <summary>把 Android 工具链路径显式写进编辑器设置（batchmode 下自带 JDK 检测会失灵）。
+    /// ★2026-10-11 实测：Unity 6 的 Android 后处理只认 AndroidExternalToolsSettings.*RootPath，
+    /// 不读旧的 EditorPrefs("JdkPath")——只写后者时打包会以 "UnityException: JDK not found" 秒败
+    ///（日志特征：Reporting tool paths: JDK: ''）。两套都写，双保险。</summary>
     static void ConfigureAndroidTools()
     {
         const string root = @"D:\Development\Unity\Editor\Data\PlaybackEngines\AndroidPlayer";
         EditorPrefs.SetString("JdkPath", $@"{root}\OpenJDK");
         EditorPrefs.SetString("AndroidSdkRoot", $@"{root}\SDK");
         EditorPrefs.SetString("AndroidNdkRoot", $@"{root}\NDK");
-        Debug.Log($"[Build] 工具路径已设置：JdkPath={root}\\OpenJDK");
+        try
+        {
+            UnityEditor.Android.AndroidExternalToolsSettings.jdkRootPath = $@"{root}\OpenJDK";
+            UnityEditor.Android.AndroidExternalToolsSettings.sdkRootPath = $@"{root}\SDK";
+            UnityEditor.Android.AndroidExternalToolsSettings.ndkRootPath = $@"{root}\NDK";
+            UnityEditor.Android.AndroidExternalToolsSettings.gradlePath = $@"{root}\Tools\gradle";
+            Debug.Log($"[Build] 工具路径已设置（AndroidExternalToolsSettings + EditorPrefs）：JDK={root}\\OpenJDK");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"[Build] AndroidExternalToolsSettings 写入失败（沿用 EditorPrefs）：{e.Message}");
+        }
     }
 }

@@ -1,298 +1,352 @@
 <?xml version="1.0" encoding="utf-8"?>
-<test-run id="2" testcasecount="44" result="Passed" total="44" passed="44" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:15Z" duration="0.1597577">
-  <test-suite type="TestSuite" id="1000" name="ARAttentionTrainer" fullname="ARAttentionTrainer" runstate="Runnable" testcasecount="44" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:15Z" duration="0.159758" total="44" passed="44" failed="0" inconclusive="0" skipped="0" asserts="0">
+<test-run id="2" testcasecount="52" result="Passed" total="52" passed="52" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.2915028">
+  <test-suite type="TestSuite" id="1000" name="ARAttentionTrainer" fullname="ARAttentionTrainer" runstate="Runnable" testcasecount="52" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.291503" total="52" passed="52" failed="0" inconclusive="0" skipped="0" asserts="0">
     <properties>
       <property name="platform" value="EditMode" />
     </properties>
-    <test-suite type="Assembly" id="1053" name="ARAttention.Tests.EditMode.dll" fullname="D:/Development/Unity/ARAttentionTrainer/Library/ScriptAssemblies/ARAttention.Tests.EditMode.dll" runstate="Runnable" testcasecount="44" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:15Z" duration="0.146364" total="44" passed="44" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <test-suite type="Assembly" id="1063" name="ARAttention.Tests.EditMode.dll" fullname="D:/Development/Unity/ARAttentionTrainer/Library/ScriptAssemblies/ARAttention.Tests.EditMode.dll" runstate="Runnable" testcasecount="52" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.273317" total="52" passed="52" failed="0" inconclusive="0" skipped="0" asserts="0">
       <properties>
-        <property name="_PID" value="37336" />
+        <property name="_PID" value="36400" />
         <property name="_APPDOMAIN" value="Unity Child Domain" />
         <property name="platform" value="EditMode" />
         <property name="EditorOnly" value="True" />
       </properties>
-      <test-suite type="TestFixture" id="1001" name="DetectionPostprocessTests" fullname="DetectionPostprocessTests" classname="DetectionPostprocessTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.043873" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1001" name="DetectionPostprocessTests" fullname="DetectionPostprocessTests" classname="DetectionPostprocessTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.088956" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1004" name="IoU_IdenticalBoxes_IsOne" fullname="DetectionPostprocessTests.IoU_IdenticalBoxes_IsOne" methodname="IoU_IdenticalBoxes_IsOne" classname="DetectionPostprocessTests" runstate="Runnable" seed="1963254613" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.021427" asserts="0">
+        <test-case id="1004" name="IoU_IdenticalBoxes_IsOne" fullname="DetectionPostprocessTests.IoU_IdenticalBoxes_IsOne" methodname="IoU_IdenticalBoxes_IsOne" classname="DetectionPostprocessTests" runstate="Runnable" seed="1055485818" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.041702" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1003" name="NMS_FiltersBelowConfidenceThreshold" fullname="DetectionPostprocessTests.NMS_FiltersBelowConfidenceThreshold" methodname="NMS_FiltersBelowConfidenceThreshold" classname="DetectionPostprocessTests" runstate="Runnable" seed="1608377918" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.002035" asserts="0">
+        <test-case id="1003" name="NMS_FiltersBelowConfidenceThreshold" fullname="DetectionPostprocessTests.NMS_FiltersBelowConfidenceThreshold" methodname="NMS_FiltersBelowConfidenceThreshold" classname="DetectionPostprocessTests" runstate="Runnable" seed="730447565" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.007239" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1002" name="NMS_KeepsHighestConfidence_AmongOverlapping" fullname="DetectionPostprocessTests.NMS_KeepsHighestConfidence_AmongOverlapping" methodname="NMS_KeepsHighestConfidence_AmongOverlapping" classname="DetectionPostprocessTests" runstate="Runnable" seed="905972547" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000769" asserts="0">
+        <test-case id="1002" name="NMS_KeepsHighestConfidence_AmongOverlapping" fullname="DetectionPostprocessTests.NMS_KeepsHighestConfidence_AmongOverlapping" methodname="NMS_KeepsHighestConfidence_AmongOverlapping" classname="DetectionPostprocessTests" runstate="Runnable" seed="1128007220" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.002115" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
       </test-suite>
-      <test-suite type="TestFixture" id="1005" name="GazeLogicTests" fullname="GazeLogicTests" classname="GazeLogicTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.012040" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1005" name="GazeLogicTests" fullname="GazeLogicTests" classname="GazeLogicTests" runstate="Runnable" testcasecount="5" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.017399" total="5" passed="5" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1007" name="GazeStarted_FiresExactlyOnce_AtThreshold" fullname="GazeLogicTests.GazeStarted_FiresExactlyOnce_AtThreshold" methodname="GazeStarted_FiresExactlyOnce_AtThreshold" classname="GazeLogicTests" runstate="Runnable" seed="69705645" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.006354" asserts="0">
+        <test-case id="1007" name="GazeStarted_FiresExactlyOnce_AtThreshold" fullname="GazeLogicTests.GazeStarted_FiresExactlyOnce_AtThreshold" methodname="GazeStarted_FiresExactlyOnce_AtThreshold" classname="GazeLogicTests" runstate="Runnable" seed="1325155969" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.008038" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1010" name="GazeStarted_Refires_AfterDroppingBelowThreshold" fullname="GazeLogicTests.GazeStarted_Refires_AfterDroppingBelowThreshold" methodname="GazeStarted_Refires_AfterDroppingBelowThreshold" classname="GazeLogicTests" runstate="Runnable" seed="1497219770" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000468" asserts="0">
+        <test-case id="1010" name="GazeStarted_Refires_AfterDroppingBelowThreshold" fullname="GazeLogicTests.GazeStarted_Refires_AfterDroppingBelowThreshold" methodname="GazeStarted_Refires_AfterDroppingBelowThreshold" classname="GazeLogicTests" runstate="Runnable" seed="1240043217" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000563" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1008" name="GazeSustained_FiresExactlyOnce_AtThreshold" fullname="GazeLogicTests.GazeSustained_FiresExactlyOnce_AtThreshold" methodname="GazeSustained_FiresExactlyOnce_AtThreshold" classname="GazeLogicTests" runstate="Runnable" seed="1968082703" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000362" asserts="0">
+        <test-case id="1008" name="GazeSustained_FiresExactlyOnce_AtThreshold" fullname="GazeLogicTests.GazeSustained_FiresExactlyOnce_AtThreshold" methodname="GazeSustained_FiresExactlyOnce_AtThreshold" classname="GazeLogicTests" runstate="Runnable" seed="821122309" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000439" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1006" name="IsLookingAt_Center_True_Corner_False" fullname="GazeLogicTests.IsLookingAt_Center_True_Corner_False" methodname="IsLookingAt_Center_True_Corner_False" classname="GazeLogicTests" runstate="Runnable" seed="993467002" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.001294" asserts="0">
+        <test-case id="1006" name="IsLookingAt_Center_True_Corner_False" fullname="GazeLogicTests.IsLookingAt_Center_True_Corner_False" methodname="IsLookingAt_Center_True_Corner_False" classname="GazeLogicTests" runstate="Runnable" seed="999718764" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.001560" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1009" name="NotLooking_DecaysDwell_NotHardReset" fullname="GazeLogicTests.NotLooking_DecaysDwell_NotHardReset" methodname="NotLooking_DecaysDwell_NotHardReset" classname="GazeLogicTests" runstate="Runnable" seed="1101715529" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000380" asserts="0">
+        <test-case id="1009" name="NotLooking_DecaysDwell_NotHardReset" fullname="GazeLogicTests.NotLooking_DecaysDwell_NotHardReset" methodname="NotLooking_DecaysDwell_NotHardReset" classname="GazeLogicTests" runstate="Runnable" seed="1499720629" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000415" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
       </test-suite>
-      <test-suite type="TestFixture" id="1011" name="InteractionStateMachineTests" fullname="InteractionStateMachineTests" classname="InteractionStateMachineTests" runstate="Runnable" testcasecount="10" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.010639" total="10" passed="10" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1011" name="InteractionStateMachineTests" fullname="InteractionStateMachineTests" classname="InteractionStateMachineTests" runstate="Runnable" testcasecount="11" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.020512" total="11" passed="11" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1021" name="Feedback_EndsToIdle_ThenCooldownBlocksGuide" fullname="InteractionStateMachineTests.Feedback_EndsToIdle_ThenCooldownBlocksGuide" methodname="Feedback_EndsToIdle_ThenCooldownBlocksGuide" classname="InteractionStateMachineTests" runstate="Runnable" seed="1862838384" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.003500" asserts="0">
+        <test-case id="1022" name="Feedback_EndsToIdle_ThenCooldownBlocksGuide" fullname="InteractionStateMachineTests.Feedback_EndsToIdle_ThenCooldownBlocksGuide" methodname="Feedback_EndsToIdle_ThenCooldownBlocksGuide" classname="InteractionStateMachineTests" runstate="Runnable" seed="1653812707" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.005908" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1015" name="Guiding_ToHidden_OnGazeStarted" fullname="InteractionStateMachineTests.Guiding_ToHidden_OnGazeStarted" methodname="Guiding_ToHidden_OnGazeStarted" classname="InteractionStateMachineTests" runstate="Runnable" seed="71491929" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000385" asserts="0">
+        <test-case id="1016" name="Guiding_StaysInAttractionMode_OnTargetLost" fullname="InteractionStateMachineTests.Guiding_StaysInAttractionMode_OnTargetLost" methodname="Guiding_StaysInAttractionMode_OnTargetLost" classname="InteractionStateMachineTests" runstate="Runnable" seed="586847286" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000518" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1017" name="Guiding_ToIdle_AfterLongSilence" fullname="InteractionStateMachineTests.Guiding_ToIdle_AfterLongSilence" methodname="Guiding_ToIdle_AfterLongSilence" classname="InteractionStateMachineTests" runstate="Runnable" seed="1119162063" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000325" asserts="0">
+        <test-case id="1015" name="Guiding_ToHidden_OnGazeStarted" fullname="InteractionStateMachineTests.Guiding_ToHidden_OnGazeStarted" methodname="Guiding_ToHidden_OnGazeStarted" classname="InteractionStateMachineTests" runstate="Runnable" seed="1981886518" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000466" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1016" name="Guiding_ToIdle_OnTargetLost" fullname="InteractionStateMachineTests.Guiding_ToIdle_OnTargetLost" methodname="Guiding_ToIdle_OnTargetLost" classname="InteractionStateMachineTests" runstate="Runnable" seed="914541026" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000352" asserts="0">
+        <test-case id="1018" name="Guiding_ToIdle_AfterLongSilence" fullname="InteractionStateMachineTests.Guiding_ToIdle_AfterLongSilence" methodname="Guiding_ToIdle_AfterLongSilence" classname="InteractionStateMachineTests" runstate="Runnable" seed="1330917250" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000389" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1018" name="Hidden_Feedback_WhenSustainedThenSpeechEnds" fullname="InteractionStateMachineTests.Hidden_Feedback_WhenSustainedThenSpeechEnds" methodname="Hidden_Feedback_WhenSustainedThenSpeechEnds" classname="InteractionStateMachineTests" runstate="Runnable" seed="21447220" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000441" asserts="0">
+        <test-case id="1019" name="Hidden_Feedback_WhenSustainedThenSpeechEnds" fullname="InteractionStateMachineTests.Hidden_Feedback_WhenSustainedThenSpeechEnds" methodname="Hidden_Feedback_WhenSustainedThenSpeechEnds" classname="InteractionStateMachineTests" runstate="Runnable" seed="1665688002" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000452" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1019" name="Hidden_NoFeedback_IfSpeechEndsWhileNotLooking" fullname="InteractionStateMachineTests.Hidden_NoFeedback_IfSpeechEndsWhileNotLooking" methodname="Hidden_NoFeedback_IfSpeechEndsWhileNotLooking" classname="InteractionStateMachineTests" runstate="Runnable" seed="870034831" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000589" asserts="0">
+        <test-case id="1020" name="Hidden_NoFeedback_IfSpeechEndsWhileNotLooking" fullname="InteractionStateMachineTests.Hidden_NoFeedback_IfSpeechEndsWhileNotLooking" methodname="Hidden_NoFeedback_IfSpeechEndsWhileNotLooking" classname="InteractionStateMachineTests" runstate="Runnable" seed="1234847981" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000581" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1020" name="Hidden_ReGuides_AfterLookAwayAndCooldown" fullname="InteractionStateMachineTests.Hidden_ReGuides_AfterLookAwayAndCooldown" methodname="Hidden_ReGuides_AfterLookAwayAndCooldown" classname="InteractionStateMachineTests" runstate="Runnable" seed="603215208" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000508" asserts="0">
+        <test-case id="1021" name="Hidden_ReGuides_AfterLookAwayAndCooldown" fullname="InteractionStateMachineTests.Hidden_ReGuides_AfterLookAwayAndCooldown" methodname="Hidden_ReGuides_AfterLookAwayAndCooldown" classname="InteractionStateMachineTests" runstate="Runnable" seed="933408060" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000749" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1013" name="Idle_Guides_WhenSpeakingAndNotLooking" fullname="InteractionStateMachineTests.Idle_Guides_WhenSpeakingAndNotLooking" methodname="Idle_Guides_WhenSpeakingAndNotLooking" classname="InteractionStateMachineTests" runstate="Runnable" seed="1500855828" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000417" asserts="0">
+        <test-case id="1013" name="Idle_Guides_WhenSpeakingAndNotLooking" fullname="InteractionStateMachineTests.Idle_Guides_WhenSpeakingAndNotLooking" methodname="Idle_Guides_WhenSpeakingAndNotLooking" classname="InteractionStateMachineTests" runstate="Runnable" seed="1832317096" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000594" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1014" name="Idle_NoGuide_WhenAlreadyLooking" fullname="InteractionStateMachineTests.Idle_NoGuide_WhenAlreadyLooking" methodname="Idle_NoGuide_WhenAlreadyLooking" classname="InteractionStateMachineTests" runstate="Runnable" seed="1504687366" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000301" asserts="0">
+        <test-case id="1017" name="Idle_Guides_WithoutTarget_AttractionMode" fullname="InteractionStateMachineTests.Idle_Guides_WithoutTarget_AttractionMode" methodname="Idle_Guides_WithoutTarget_AttractionMode" classname="InteractionStateMachineTests" runstate="Runnable" seed="1731382598" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000386" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1012" name="Idle_StaysWhenSilent" fullname="InteractionStateMachineTests.Idle_StaysWhenSilent" methodname="Idle_StaysWhenSilent" classname="InteractionStateMachineTests" runstate="Runnable" seed="819788848" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000244" asserts="0">
+        <test-case id="1014" name="Idle_NoGuide_WhenAlreadyLooking" fullname="InteractionStateMachineTests.Idle_NoGuide_WhenAlreadyLooking" methodname="Idle_NoGuide_WhenAlreadyLooking" classname="InteractionStateMachineTests" runstate="Runnable" seed="608588673" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000335" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1012" name="Idle_StaysWhenSilent" fullname="InteractionStateMachineTests.Idle_StaysWhenSilent" methodname="Idle_StaysWhenSilent" classname="InteractionStateMachineTests" runstate="Runnable" seed="1289925326" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000831" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
       </test-suite>
-      <test-suite type="TestFixture" id="1022" name="LevelFallbackTests" fullname="LevelFallbackTests" classname="LevelFallbackTests" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.059273" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1023" name="LevelFallbackTests" fullname="LevelFallbackTests" classname="LevelFallbackTests" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.100865" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1023" name="ApplyLevel_Strong_MatchesDesignTable" fullname="LevelFallbackTests.ApplyLevel_Strong_MatchesDesignTable" methodname="ApplyLevel_Strong_MatchesDesignTable" classname="LevelFallbackTests" runstate="Runnable" seed="1094531861" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.001583" asserts="0">
+        <test-case id="1024" name="ApplyLevel_Strong_MatchesDesignTable" fullname="LevelFallbackTests.ApplyLevel_Strong_MatchesDesignTable" methodname="ApplyLevel_Strong_MatchesDesignTable" classname="LevelFallbackTests" runstate="Runnable" seed="897646446" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.002747" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1024" name="ApplyLevel_Weak_MatchesDesignTable_AndClamps" fullname="LevelFallbackTests.ApplyLevel_Weak_MatchesDesignTable_AndClamps" methodname="ApplyLevel_Weak_MatchesDesignTable_AndClamps" classname="LevelFallbackTests" runstate="Runnable" seed="2141107782" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000413" asserts="0">
+        <test-case id="1025" name="ApplyLevel_Weak_MatchesDesignTable_AndClamps" fullname="LevelFallbackTests.ApplyLevel_Weak_MatchesDesignTable_AndClamps" methodname="ApplyLevel_Weak_MatchesDesignTable_AndClamps" classname="LevelFallbackTests" runstate="Runnable" seed="1171669517" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000852" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1026" name="GazeLogic_StartSeconds_AdjustableAtRuntime" fullname="LevelFallbackTests.GazeLogic_StartSeconds_AdjustableAtRuntime" methodname="GazeLogic_StartSeconds_AdjustableAtRuntime" classname="LevelFallbackTests" runstate="Runnable" seed="800155900" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000210" asserts="0">
+        <test-case id="1027" name="GazeLogic_StartSeconds_AdjustableAtRuntime" fullname="LevelFallbackTests.GazeLogic_StartSeconds_AdjustableAtRuntime" methodname="GazeLogic_StartSeconds_AdjustableAtRuntime" classname="LevelFallbackTests" runstate="Runnable" seed="1281418190" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000571" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1029" name="SessionLogger_WritesSettingsDeviceVersion" fullname="LevelFallbackTests.SessionLogger_WritesSettingsDeviceVersion" methodname="SessionLogger_WritesSettingsDeviceVersion" classname="LevelFallbackTests" runstate="Runnable" seed="545988264" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.042776" asserts="0">
+        <test-case id="1030" name="SessionLogger_WritesSettingsDeviceVersion" fullname="LevelFallbackTests.SessionLogger_WritesSettingsDeviceVersion" methodname="SessionLogger_WritesSettingsDeviceVersion" classname="LevelFallbackTests" runstate="Runnable" seed="642003653" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.077849" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1025" name="SnapshotJson_UsesInvariantDecimalPoint" fullname="LevelFallbackTests.SnapshotJson_UsesInvariantDecimalPoint" methodname="SnapshotJson_UsesInvariantDecimalPoint" classname="LevelFallbackTests" runstate="Runnable" seed="1147694431" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.008741" asserts="0">
+        <test-case id="1026" name="SnapshotJson_UsesInvariantDecimalPoint" fullname="LevelFallbackTests.SnapshotJson_UsesInvariantDecimalPoint" methodname="SnapshotJson_UsesInvariantDecimalPoint" classname="LevelFallbackTests" runstate="Runnable" seed="328387584" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.010880" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1027" name="StateMachine_ReGuideCooldown_AdjustableAtRuntime" fullname="LevelFallbackTests.StateMachine_ReGuideCooldown_AdjustableAtRuntime" methodname="StateMachine_ReGuideCooldown_AdjustableAtRuntime" classname="LevelFallbackTests" runstate="Runnable" seed="1326914419" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000832" asserts="0">
+        <test-case id="1028" name="StateMachine_ReGuideCooldown_AdjustableAtRuntime" fullname="LevelFallbackTests.StateMachine_ReGuideCooldown_AdjustableAtRuntime" methodname="StateMachine_ReGuideCooldown_AdjustableAtRuntime" classname="LevelFallbackTests" runstate="Runnable" seed="1893310324" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000996" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1028" name="Tracker_ReportsBoxHeight_AndRetainsWhenLost" fullname="LevelFallbackTests.Tracker_ReportsBoxHeight_AndRetainsWhenLost" methodname="Tracker_ReportsBoxHeight_AndRetainsWhenLost" classname="LevelFallbackTests" runstate="Runnable" seed="542080467" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.002195" asserts="0">
+        <test-case id="1029" name="Tracker_ReportsBoxHeight_AndRetainsWhenLost" fullname="LevelFallbackTests.Tracker_ReportsBoxHeight_AndRetainsWhenLost" methodname="Tracker_ReportsBoxHeight_AndRetainsWhenLost" classname="LevelFallbackTests" runstate="Runnable" seed="337466301" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.003334" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
       </test-suite>
-      <test-suite type="TestFixture" id="1030" name="OneEuroFilterTests" fullname="OneEuroFilterTests" classname="OneEuroFilterTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.002380" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1031" name="MaskOccluderTests" fullname="MaskOccluderTests" classname="MaskOccluderTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.006713" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1032" name="JitteryInput_OutputIsSmootherThanInput" fullname="OneEuroFilterTests.JitteryInput_OutputIsSmootherThanInput" methodname="JitteryInput_OutputIsSmootherThanInput" classname="OneEuroFilterTests" runstate="Runnable" seed="1775968115" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000648" asserts="0">
+        <test-case id="1032" name="Center_MapsToCenter" fullname="MaskOccluderTests.Center_MapsToCenter" methodname="Center_MapsToCenter" classname="MaskOccluderTests" runstate="Runnable" seed="937125996" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.001687" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1033" name="Reset_ReinitializesToNewValue" fullname="OneEuroFilterTests.Reset_ReinitializesToNewValue" methodname="Reset_ReinitializesToNewValue" classname="OneEuroFilterTests" runstate="Runnable" seed="172554694" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000214" asserts="0">
+        <test-case id="1034" name="CenterColumn_MapsStraightDown" fullname="MaskOccluderTests.CenterColumn_MapsStraightDown" methodname="CenterColumn_MapsStraightDown" classname="MaskOccluderTests" runstate="Runnable" seed="955702079" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000658" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1031" name="StepInput_ConvergesToTarget" fullname="OneEuroFilterTests.StepInput_ConvergesToTarget" methodname="StepInput_ConvergesToTarget" classname="OneEuroFilterTests" runstate="Runnable" seed="917826941" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000210" asserts="0">
+        <test-case id="1033" name="Corners_MapToCorners_WhenFovMatches" fullname="MaskOccluderTests.Corners_MapToCorners_WhenFovMatches" methodname="Corners_MapToCorners_WhenFovMatches" classname="MaskOccluderTests" runstate="Runnable" seed="639699090" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000376" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
       </test-suite>
-      <test-suite type="TestFixture" id="1034" name="SessionLoggerTests" fullname="SessionLoggerTests" classname="SessionLoggerTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.002331" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1035" name="OneEuroFilterTests" fullname="OneEuroFilterTests" classname="OneEuroFilterTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.004957" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1037" name="BuildSessionFolderName_MatchesPattern" fullname="SessionLoggerTests.BuildSessionFolderName_MatchesPattern" methodname="BuildSessionFolderName_MatchesPattern" classname="SessionLoggerTests" runstate="Runnable" seed="1153468828" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000377" asserts="0">
+        <test-case id="1037" name="JitteryInput_OutputIsSmootherThanInput" fullname="OneEuroFilterTests.JitteryInput_OutputIsSmootherThanInput" methodname="JitteryInput_OutputIsSmootherThanInput" classname="OneEuroFilterTests" runstate="Runnable" seed="2113142944" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.001077" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1035" name="FormatSampleCsv_ProducesExpectedColumns" fullname="SessionLoggerTests.FormatSampleCsv_ProducesExpectedColumns" methodname="FormatSampleCsv_ProducesExpectedColumns" classname="SessionLoggerTests" runstate="Runnable" seed="2050807982" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000724" asserts="0">
+        <test-case id="1038" name="Reset_ReinitializesToNewValue" fullname="OneEuroFilterTests.Reset_ReinitializesToNewValue" methodname="Reset_ReinitializesToNewValue" classname="OneEuroFilterTests" runstate="Runnable" seed="986293012" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000535" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1036" name="FormatSampleCsv_UsesInvariantDecimalSeparator" fullname="SessionLoggerTests.FormatSampleCsv_UsesInvariantDecimalSeparator" methodname="FormatSampleCsv_UsesInvariantDecimalSeparator" classname="SessionLoggerTests" runstate="Runnable" seed="2120933395" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000209" asserts="0">
+        <test-case id="1036" name="StepInput_ConvergesToTarget" fullname="OneEuroFilterTests.StepInput_ConvergesToTarget" methodname="StepInput_ConvergesToTarget" classname="OneEuroFilterTests" runstate="Runnable" seed="1716678407" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000503" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
       </test-suite>
-      <test-suite type="TestFixture" id="1038" name="TargetTrackerLogicTests" fullname="TargetTrackerLogicTests" classname="TargetTrackerLogicTests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:15Z" duration="0.006170" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1039" name="SelfieSegEdgeTests" fullname="SelfieSegEdgeTests" classname="SelfieSegEdgeTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.004912" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1040" name="FirstLock_PicksLargestArea" fullname="TargetTrackerLogicTests.FirstLock_PicksLargestArea" methodname="FirstLock_PicksLargestArea" classname="TargetTrackerLogicTests" runstate="Runnable" seed="944795051" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.001228" asserts="0">
+        <test-case id="1042" name="EmptyMask_ReturnsFalse" fullname="SelfieSegEdgeTests.EmptyMask_ReturnsFalse" methodname="EmptyMask_ReturnsFalse" classname="SelfieSegEdgeTests" runstate="Runnable" seed="675081744" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.001328" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1039" name="HeadPoint_IsUpperCenterOfBox" fullname="TargetTrackerLogicTests.HeadPoint_IsUpperCenterOfBox" methodname="HeadPoint_IsUpperCenterOfBox" classname="TargetTrackerLogicTests" runstate="Runnable" seed="1039234315" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:14Z" duration="0.000539" asserts="0">
+        <test-case id="1040" name="LeftEdge_FindsLeftmostColumnOfBlob" fullname="SelfieSegEdgeTests.LeftEdge_FindsLeftmostColumnOfBlob" methodname="LeftEdge_FindsLeftmostColumnOfBlob" classname="SelfieSegEdgeTests" runstate="Runnable" seed="922113333" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000619" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1044" name="Lost_HoldThenFreezeThenInvalid" fullname="TargetTrackerLogicTests.Lost_HoldThenFreezeThenInvalid" methodname="Lost_HoldThenFreezeThenInvalid" classname="TargetTrackerLogicTests" runstate="Runnable" seed="490419745" result="Passed" start-time="2026-10-10 06:45:14Z" end-time="2026-10-10 06:45:15Z" duration="0.000600" asserts="0">
+        <test-case id="1041" name="RightEdge_FindsRightmostColumnOfBlob" fullname="SelfieSegEdgeTests.RightEdge_FindsRightmostColumnOfBlob" methodname="RightEdge_FindsRightmostColumnOfBlob" classname="SelfieSegEdgeTests" runstate="Runnable" seed="1940268783" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000334" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1043" name="LostTarget_ReAcquires_NewPersonAfterDelay" fullname="TargetTrackerLogicTests.LostTarget_ReAcquires_NewPersonAfterDelay" methodname="LostTarget_ReAcquires_NewPersonAfterDelay" classname="TargetTrackerLogicTests" runstate="Runnable" seed="943758743" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.000672" asserts="0">
-          <properties>
-            <property name="retryIteration" value="0" />
-            <property name="repeatIteration" value="0" />
-          </properties>
-        </test-case>
-        <test-case id="1042" name="MuchLargerCandidate_SwitchesTarget" fullname="TargetTrackerLogicTests.MuchLargerCandidate_SwitchesTarget" methodname="MuchLargerCandidate_SwitchesTarget" classname="TargetTrackerLogicTests" runstate="Runnable" seed="1273794813" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.000488" asserts="0">
-          <properties>
-            <property name="retryIteration" value="0" />
-            <property name="repeatIteration" value="0" />
-          </properties>
-        </test-case>
-        <test-case id="1041" name="SlightlyLargerCandidate_DoesNotStealTarget" fullname="TargetTrackerLogicTests.SlightlyLargerCandidate_DoesNotStealTarget" methodname="SlightlyLargerCandidate_DoesNotStealTarget" classname="TargetTrackerLogicTests" runstate="Runnable" seed="308731768" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.000671" asserts="0">
+        <test-case id="1043" name="SearchRange_Respected" fullname="SelfieSegEdgeTests.SearchRange_Respected" methodname="SearchRange_Respected" classname="SelfieSegEdgeTests" runstate="Runnable" seed="1279035017" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000448" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
       </test-suite>
-      <test-suite type="TestFixture" id="1045" name="VadLogicTests" fullname="VadLogicTests" classname="VadLogicTests" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.005482" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <test-suite type="TestFixture" id="1044" name="SessionLoggerTests" fullname="SessionLoggerTests" classname="SessionLoggerTests" runstate="Runnable" testcasecount="3" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.005313" total="3" passed="3" failed="0" inconclusive="0" skipped="0" asserts="0">
         <properties />
-        <test-case id="1050" name="Blip_ShortNoise_DoesNotFireSpeechEnded" fullname="VadLogicTests.Blip_ShortNoise_DoesNotFireSpeechEnded" methodname="Blip_ShortNoise_DoesNotFireSpeechEnded" classname="VadLogicTests" runstate="Runnable" seed="2051487472" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.001018" asserts="0">
+        <test-case id="1047" name="BuildSessionFolderName_MatchesPattern" fullname="SessionLoggerTests.BuildSessionFolderName_MatchesPattern" methodname="BuildSessionFolderName_MatchesPattern" classname="SessionLoggerTests" runstate="Runnable" seed="1593857958" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000818" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1046" name="Calibration_SetsNoiseFloor" fullname="VadLogicTests.Calibration_SetsNoiseFloor" methodname="Calibration_SetsNoiseFloor" classname="VadLogicTests" runstate="Runnable" seed="985135948" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.000268" asserts="0">
+        <test-case id="1045" name="FormatSampleCsv_ProducesExpectedColumns" fullname="SessionLoggerTests.FormatSampleCsv_ProducesExpectedColumns" methodname="FormatSampleCsv_ProducesExpectedColumns" classname="SessionLoggerTests" runstate="Runnable" seed="2062129425" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000677" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1052" name="Energy_Silence_IsFloor" fullname="VadLogicTests.Energy_Silence_IsFloor" methodname="Energy_Silence_IsFloor" classname="VadLogicTests" runstate="Runnable" seed="526287004" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.000464" asserts="0">
+        <test-case id="1046" name="FormatSampleCsv_UsesInvariantDecimalSeparator" fullname="SessionLoggerTests.FormatSampleCsv_UsesInvariantDecimalSeparator" methodname="FormatSampleCsv_UsesInvariantDecimalSeparator" classname="SessionLoggerTests" runstate="Runnable" seed="892571369" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000245" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1051" name="Energy_SineHalfAmplitude_IsAboutMinus9dB" fullname="VadLogicTests.Energy_SineHalfAmplitude_IsAboutMinus9dB" methodname="Energy_SineHalfAmplitude_IsAboutMinus9dB" classname="VadLogicTests" runstate="Runnable" seed="216135527" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.000625" asserts="0">
+      </test-suite>
+      <test-suite type="TestFixture" id="1048" name="TargetTrackerLogicTests" fullname="TargetTrackerLogicTests" classname="TargetTrackerLogicTests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.007464" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-case id="1050" name="FirstLock_PicksLargestArea" fullname="TargetTrackerLogicTests.FirstLock_PicksLargestArea" methodname="FirstLock_PicksLargestArea" classname="TargetTrackerLogicTests" runstate="Runnable" seed="2146372456" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.001591" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1049" name="LongSilence_EndsSpeech_FiresOnce" fullname="VadLogicTests.LongSilence_EndsSpeech_FiresOnce" methodname="LongSilence_EndsSpeech_FiresOnce" classname="VadLogicTests" runstate="Runnable" seed="41179584" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.000355" asserts="0">
+        <test-case id="1049" name="HeadPoint_IsUpperCenterOfBox" fullname="TargetTrackerLogicTests.HeadPoint_IsUpperCenterOfBox" methodname="HeadPoint_IsUpperCenterOfBox" classname="TargetTrackerLogicTests" runstate="Runnable" seed="316492517" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000203" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1048" name="ShortPause_IsBridged_KeepsSpeaking" fullname="VadLogicTests.ShortPause_IsBridged_KeepsSpeaking" methodname="ShortPause_IsBridged_KeepsSpeaking" classname="VadLogicTests" runstate="Runnable" seed="1502381568" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.000315" asserts="0">
+        <test-case id="1054" name="Lost_HoldThenFreezeThenInvalid" fullname="TargetTrackerLogicTests.Lost_HoldThenFreezeThenInvalid" methodname="Lost_HoldThenFreezeThenInvalid" classname="TargetTrackerLogicTests" runstate="Runnable" seed="1484042670" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000729" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />
           </properties>
         </test-case>
-        <test-case id="1047" name="SpeechStart_AfterDebounce_FiresOnce" fullname="VadLogicTests.SpeechStart_AfterDebounce_FiresOnce" methodname="SpeechStart_AfterDebounce_FiresOnce" classname="VadLogicTests" runstate="Runnable" seed="1436871331" result="Passed" start-time="2026-10-10 06:45:15Z" end-time="2026-10-10 06:45:15Z" duration="0.000268" asserts="0">
+        <test-case id="1053" name="LostTarget_ReAcquires_NewPersonAfterDelay" fullname="TargetTrackerLogicTests.LostTarget_ReAcquires_NewPersonAfterDelay" methodname="LostTarget_ReAcquires_NewPersonAfterDelay" classname="TargetTrackerLogicTests" runstate="Runnable" seed="443508504" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.001120" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1052" name="MuchLargerCandidate_SwitchesTarget" fullname="TargetTrackerLogicTests.MuchLargerCandidate_SwitchesTarget" methodname="MuchLargerCandidate_SwitchesTarget" classname="TargetTrackerLogicTests" runstate="Runnable" seed="32769569" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000788" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1051" name="SlightlyLargerCandidate_DoesNotStealTarget" fullname="TargetTrackerLogicTests.SlightlyLargerCandidate_DoesNotStealTarget" methodname="SlightlyLargerCandidate_DoesNotStealTarget" classname="TargetTrackerLogicTests" runstate="Runnable" seed="745101992" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000796" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+      </test-suite>
+      <test-suite type="TestFixture" id="1055" name="VadLogicTests" fullname="VadLogicTests" classname="VadLogicTests" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.008579" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-case id="1060" name="Blip_ShortNoise_DoesNotFireSpeechEnded" fullname="VadLogicTests.Blip_ShortNoise_DoesNotFireSpeechEnded" methodname="Blip_ShortNoise_DoesNotFireSpeechEnded" classname="VadLogicTests" runstate="Runnable" seed="1502088775" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.001887" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1056" name="Calibration_SetsNoiseFloor" fullname="VadLogicTests.Calibration_SetsNoiseFloor" methodname="Calibration_SetsNoiseFloor" classname="VadLogicTests" runstate="Runnable" seed="466862487" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000325" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1062" name="Energy_Silence_IsFloor" fullname="VadLogicTests.Energy_Silence_IsFloor" methodname="Energy_Silence_IsFloor" classname="VadLogicTests" runstate="Runnable" seed="1830483062" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000678" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1061" name="Energy_SineHalfAmplitude_IsAboutMinus9dB" fullname="VadLogicTests.Energy_SineHalfAmplitude_IsAboutMinus9dB" methodname="Energy_SineHalfAmplitude_IsAboutMinus9dB" classname="VadLogicTests" runstate="Runnable" seed="668116419" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000421" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1059" name="LongSilence_EndsSpeech_FiresOnce" fullname="VadLogicTests.LongSilence_EndsSpeech_FiresOnce" methodname="LongSilence_EndsSpeech_FiresOnce" classname="VadLogicTests" runstate="Runnable" seed="235072336" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000534" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1058" name="ShortPause_IsBridged_KeepsSpeaking" fullname="VadLogicTests.ShortPause_IsBridged_KeepsSpeaking" methodname="ShortPause_IsBridged_KeepsSpeaking" classname="VadLogicTests" runstate="Runnable" seed="1538882457" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000440" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1057" name="SpeechStart_AfterDebounce_FiresOnce" fullname="VadLogicTests.SpeechStart_AfterDebounce_FiresOnce" methodname="SpeechStart_AfterDebounce_FiresOnce" classname="VadLogicTests" runstate="Runnable" seed="453835196" result="Passed" start-time="2026-10-10 14:14:31Z" end-time="2026-10-10 14:14:31Z" duration="0.000449" asserts="0">
           <properties>
             <property name="retryIteration" value="0" />
             <property name="repeatIteration" value="0" />

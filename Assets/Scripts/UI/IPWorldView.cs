@@ -1,27 +1,73 @@
 // Assets/Scripts/UI/IPWorldView.cs
-// 真机世界空间 IP（小精灵）：把精灵"贴"到老师头部的真实 3D 位置。
+// 真机世界空间 IP（小精灵/火柴人）：把精灵"贴"到老师头部的真实 3D 位置。
 // 驱动层（M3DebugDriver）保持平台无关——只推归一化坐标/透明度/缩放（与电脑版 IPDebugView 同接口）；
 // 本组件用与 Detection3DOverlay 相同的反投影管道（帧同步位姿 + 焦距）换算世界位置。
-// 关键机制——"世界锚定"：只有输入坐标/框高变化时才重算世界位置。
-//   目标丢失时跟踪器输出冻结值（坐标不变）→ 精灵停在原地（世界坐标稳定），
-//   不会随头部转动而漂移（符合设计文档 §4.3"人脸可丢，方向不丢"）。
-// 占位美术：程序生成圆形贴图（与电脑版 IPDebugView 同款脸）。
-// 组员正式素材到位后：替换 CreatePlaceholderSprite 的实现（或直接给 SpriteRenderer 换 sprite）。
+//
+// 2026-10-11 重做（用户定调：参考 First Encounters 的"位置稳定 + 移动合理"，消灭抖动/闪现）：
+//   ① 锚定规则：目标有效→每检测批次（~5Hz）重锚；目标丢失→冻结（不随头转漂移）；
+//      从未锁过目标（开场吸引）→跟随驱动动画；陪伴模式→分割掩码更新时贴轮廓。
+//   ② 连续追赶：渲染位置每帧用 SmoothDamp 平滑趋近锚点（不再 5Hz 瞬跳），
+//      超大跨度（重生/重锁跨房间）直接吸附，不发生长距离飞行。
+//   ③ 朝向用 Slerp 指数平滑；透明度交给材质的 alpha（StickFigureIp），不用 SetActive 闪现。
+//   ④ 空间围栏：有 MRUK 房间数据时把锚点约束在房间内（不穿墙/地板）——"空间定位"感。
+// 占位美术：StickFigureIp 火柴人（为组员正式 3D 模型预留的接口节点 model3D）。
 using Meta.XR;
+using Meta.XR.MRUtilityKit;
 using UnityEngine;
 
 public class IPWorldView : MonoBehaviour
 {
+    /// <summary>C 项：驱动层推送的动画状态（与 M3DebugDriver.IpAnim 顺序一一对应）。</summary>
+    public enum IPAnimState { Hidden = 0, Appearing = 1, Guiding = 2, Companion = 3, Feedback = 4, Peek = 5 }
+    public IPAnimState animState;
     [Header("引用")]
     public PcaFrameSource frameSource;
+    public FaceDetector detector;   // 检测批次版本（~5Hz 重锚节拍）
+    public SelfieSegRunner seg;     // 人体轮廓分割（陪伴模式：精灵贴真实轮廓边缘）
+    public EnvironmentRaycastManager envRaycast; // B：环境射线实测距离（有深度/房间数据时优先）
+    public GameObject model3D;      // C：3D 模型（火柴人占位/组员正式模型；为空则用精灵贴图）
+    public Animator animator;       // C：正式模型动画驱动（Animator 缺失时走 StickFigureIp 程序化姿态）
+    public MrukBootstrap mruk;      // 空间锚定：房间边界围栏
+
+    [Header("轮廓贴合")]
+    [Tooltip("真机驱动推送：当前是否处于陪伴模式（贴轮廓）")]
+    public bool companionMode;
+    [Tooltip("驱动推送：陪伴方位（-1=脸左，+1=脸右）")]
+    public float sideHint = 1f;
+    [Tooltip("驱动推送：目标是否有效——有效=跟随锚定；丢失=冻结防漂移（设计 §4.3 脸可丢方向不丢）")]
+    public bool targetValid;
+
+    [Header("移动平滑（First Encounters 手感）")]
+    [Tooltip("渲染位置追赶锚点的时间常数（秒）——抹平 5Hz 重锚步进")]
+    public float positionSmoothTime = 0.17f;
+    [Tooltip("最大移动速度（米/秒）——超速自动限幅（防甩飞）")]
+    public float maxSpeed = 2.5f;
+    [Tooltip("超过该距离视为瞬移（重生/跨房间重锁）：直接吸附，不做长距离飞行")]
+    public float snapDistance = 1.2f;
+    [Tooltip("朝向平滑时间（秒）")]
+    public float rotationSmoothTime = 0.2f;
+
+    [Header("空间围栏（MRUK 房间边界）")]
+    [Tooltip("与人墙/边界保持的边距（米）")]
+    public float roomMargin = 0.35f;
+    [Tooltip("最低高度=地板+该值（米）")]
+    public float floorMinY = 0.45f;
+    [Tooltip("最高高度=天花板-该值（米）")]
+    public float ceilClearance = 0.35f;
+
+    [Header("模型接口（组员正式模型约定）")]
+    [Tooltip("模型原生身高（米）——按 baseWorldSize/modelNativeHeight 归一缩放：FBX 按真实米制建模即可，不用在源文件里缩放")]
+    public float modelNativeHeight = 1f;
 
     [Header("参数")]
     [Tooltip("估算用的人体身高（与检测框一致）")]
     public float assumedPersonHeight = 1.7f;
-    [Tooltip("精灵基准世界尺寸（米）：≈人脸高度")]
-    public float baseWorldSize = 0.20f;
+    [Tooltip("精灵基准世界尺寸（米）：略大于人脸，保证远距离也醒目（用户要求做大）")]
+    public float baseWorldSize = 0.34f;
     [Tooltip("世界偏移：微调到脸侧/脸前，避免与脸完全重叠")]
     public Vector3 worldOffset = new Vector3(0f, 0f, -0.03f);
+    [Tooltip("吸引模式（尚无目标框）时精灵显示的默认距离（米）")]
+    public float attractDefaultDistance = 1.5f;
 
     // ── 驱动层每帧写入（与 IPDebugView 保持一致的接口）──
     public bool visible;
@@ -33,11 +79,30 @@ public class IPWorldView : MonoBehaviour
 
     PassthroughCameraAccess _camera;
     SpriteRenderer _renderer;
+    StickFigureIp _stick;
+    bool _stickChecked;
 
-    // 世界锚定：输入不变时保持上一帧的世界位置
+    /// <summary>精灵当前的世界位置（平滑后的渲染位置；语音空间定位用）。</summary>
+    public Vector3 CurrentWorldPos => _hasRenderPos ? _renderWorldPos : transform.position;
+
+    // 锚点（离散重建）与渲染位置（连续追赶）
     bool _hasWorldPos;
-    Vector3 _lastWorldPos;
-    float _prevX = float.NaN, _prevY = float.NaN, _prevH = float.NaN;
+    Vector3 _lastWorldPos;      // 锚点
+    Vector3 _renderWorldPos;    // 渲染位置（每帧追赶锚点）
+    Vector3 _posVel;
+    bool _hasRenderPos;
+    Quaternion _renderRot;
+    bool _hasRenderRot;
+
+    Vector2 _prevAnimPos = new Vector2(0.5f, 0.5f);
+    int _lastVersion = -1;
+    int _lastSegVersion = -1;
+    bool _everHadValidTarget;
+    float _invalidDuration;     // 连续无目标时长（>10s 回到"从未锁过"的跟随语义）
+    float _lastDiagTime;
+    IPAnimState _visualAnim = IPAnimState.Hidden;
+    IPAnimState _pendingAnim = IPAnimState.Hidden;
+    float _pendingAnimT;
 
     void Awake()
     {
@@ -50,68 +115,225 @@ public class IPWorldView : MonoBehaviour
         _renderer.enabled = false;
     }
 
+    /// <summary>把世界坐标约束在房间内（纯函数，供单测）：x/z 留边距、y ∈ [地板+floorMinY, 天花板−ceilClearance]。
+    /// 尺寸过小/无效的房间不做约束（返回原值）。</summary>
+    public static Vector3 ClampToRoom(Vector3 p, Bounds room, float margin, float floorMinY, float ceilClearance)
+    {
+        if (room.size.x > 2f * margin + 0.1f)
+            p.x = Mathf.Clamp(p.x, room.min.x + margin, room.max.x - margin);
+        if (room.size.z > 2f * margin + 0.1f)
+            p.z = Mathf.Clamp(p.z, room.min.z + margin, room.max.z - margin);
+        float yMin = room.min.y + floorMinY;
+        float yMax = room.max.y - ceilClearance;
+        if (yMax > yMin) p.y = Mathf.Clamp(p.y, yMin, yMax);
+        return p;
+    }
+
     void LateUpdate()
     {
         if (_renderer == null) return;
+        EnsureStick();
 
+        // 不可见：火柴人走"材质淡出"（平滑，不闪现）；无火柴人的模型才用 SetActive
         if (!visible || alpha <= 0.01f)
         {
             _renderer.enabled = false;
+            if (model3D != null)
+            {
+                if (_stick != null) _stick.SetVisuals(IPAnimState.Hidden, 0f, tint);
+                else model3D.SetActive(false);
+            }
             return;
         }
 
         CameraFrame frame = default;
-        bool haveFrame = false;
-        if (frameSource != null
-            && frameSource.TryGetFrame(out frame)
-            && frame.valid && frame.texture != null)
-        {
-            haveFrame = true;
-        }
-        if (!haveFrame || _camera == null)
+        if (frameSource == null || !frameSource.TryGetFrame(out frame) || !frame.valid || frame.texture == null || _camera == null)
         {
             _renderer.enabled = false;
+            if (model3D != null)
+            {
+                if (_stick != null) _stick.SetVisuals(IPAnimState.Hidden, 0f, tint);
+                else model3D.SetActive(false);
+            }
             return;
         }
 
-        // 输入变化才重算世界位置（不变 = 目标冻结/静止 → 世界锚定不漂移）
-        bool inputChanged = !_hasWorldPos
-                            || !Mathf.Approximately(x01, _prevX)
-                            || !Mathf.Approximately(y01, _prevY)
-                            || !Mathf.Approximately(height01, _prevH);
+        // ── 锚定规则（2026-10-11 重做）──
+        bool versionChanged = detector != null && detector.Version != _lastVersion;
+        if (versionChanged) _lastVersion = detector.Version;
+        bool segChanged = companionMode && seg != null && seg.Version != _lastSegVersion;
+        if (segChanged) _lastSegVersion = seg.Version;
+        bool animMoved = Vector2.Distance(new Vector2(x01, y01), _prevAnimPos) > 0.02f;
 
-        if (inputChanged)
+        if (targetValid)
         {
-            _prevX = x01; _prevY = y01; _prevH = height01;
+            _everHadValidTarget = true;
+            _invalidDuration = 0f;
+        }
+        else
+        {
+            _invalidDuration += Time.deltaTime;
+            if (_invalidDuration > 10f) _everHadValidTarget = false; // 长期无目标 → 回到吸引模式的跟随语义
+        }
+        bool anchorable = targetValid || segChanged || !_everHadValidTarget;
+        bool rebuild = !_hasWorldPos || (anchorable && (versionChanged || animMoved || segChanged));
+
+        if (rebuild)
+        {
+            _prevAnimPos = new Vector2(x01, y01);
 
             float texH = frame.texture.height;
-            float hPx = Mathf.Max(height01, 0.02f) * texH; // 防除零；过小框也给个下限
-            float dist = Mathf.Clamp(frame.focalLengthPx * assumedPersonHeight / hPx, 0.3f, 8f);
+            float hPx = height01 * texH;
+            float dist;
+            if (hPx > 8f)
+                dist = Mathf.Clamp(frame.focalLengthPx * assumedPersonHeight / hPx, 0.3f, 8f);
+            else
+                dist = attractDefaultDistance; // 吸引模式：还没有人脸框 → 固定距离出现在视野中央
 
-            var vp = new Vector2(x01, 1f - y01); // 左上原点 → 视口坐标（左下原点）
-            var ray = _camera.ViewportPointToRay(vp, frame.cameraPose);
+            // 陪伴模式 + 有轮廓掩码：位置改为"贴住真实轮廓边缘"（用户定调：与人脸贴合互动）
+            var target01 = new Vector2(x01, y01);
+            if (companionMode && seg != null && seg.Version > 0)
+            {
+                bool leftSide = sideHint < 0f;
+                float xMin = leftSide ? 0.02f : Mathf.Clamp01(x01 - 0.04f);
+                float xMax = leftSide ? Mathf.Clamp01(x01 + 0.04f) : 0.98f;
+                if (seg.TryGetEdge(y01, xMin, xMax, leftSide, out var edge))
+                    target01 = new Vector2(Mathf.Clamp01(edge.x + sideHint * 0.015f), edge.y); // 探出轮廓一点点
+            }
+
+            // ★实测修正（2026-10-10）：PCA 的 ViewportPointToRay 采用"左上原点"视口约定，
+            // 与 input 的归一化坐标一致——直接传，不要做 Unity 式 y 翻转（翻转会把精灵画到脚下）
+            var ray = _camera.ViewportPointToRay(new Vector2(target01.x, target01.y), frame.cameraPose);
+
+            // B（MRUK 环境射线实测距离）：有深度/房间数据时优先；失败回退身高公式
+            // （预声明命中结构：C# 对"短路链中 out var"的明确赋值分析会误报）
+            EnvironmentRaycastHit hit = default;
+            if (envRaycast != null &&
+                envRaycast.Raycast(ray, out hit, 8f) &&
+                hit.status == EnvironmentRaycastHitStatus.Hit)
+            {
+                float dHit = Vector3.Distance(ray.origin, hit.point);
+                if (dHit > 0.3f && dHit < 8f) dist = dHit;
+            }
 
             Vector3 right = frame.cameraPose.rotation * Vector3.right;
             Vector3 up = frame.cameraPose.rotation * Vector3.up;
             Vector3 fwd = frame.cameraPose.rotation * Vector3.forward;
             _lastWorldPos = ray.origin + ray.direction * dist
                             + right * worldOffset.x + up * worldOffset.y + fwd * worldOffset.z;
+
+            // 空间围栏：房间数据就绪时，把锚点约束在房间内（不穿墙/不插地板）
+            if (mruk != null && mruk.TryGetRoomBounds(out var room))
+                _lastWorldPos = ClampToRoom(_lastWorldPos, room, roomMargin, floorMinY, ceilClearance);
+
             _hasWorldPos = true;
         }
 
+        // ── 连续追赶（核心修复）：渲染位置逐帧平滑趋近锚点，5Hz 重锚不再瞬跳 ──
+        if (!_hasRenderPos || Vector3.Distance(_renderWorldPos, _lastWorldPos) > snapDistance)
+        {
+            _renderWorldPos = _lastWorldPos; // 首帧/大跨度（重生）→ 吸附
+            _posVel = Vector3.zero;
+            _hasRenderPos = true;
+        }
+        else
+        {
+            _renderWorldPos = Vector3.SmoothDamp(_renderWorldPos, _lastWorldPos, ref _posVel,
+                                                 positionSmoothTime, maxSpeed, Time.deltaTime);
+        }
+
+        // ── 精灵贴图路径（无 3D 模型时的回退）──
         var t = _renderer.transform;
-        t.position = _lastWorldPos;
-        // 面向用户（用帧相机位置近似眼睛位置；精灵默认面朝 +Z）
+        t.position = _renderWorldPos;
         Vector3 toEye = t.position - frame.cameraPose.position;
         if (toEye.sqrMagnitude > 1e-6f)
             t.rotation = Quaternion.LookRotation(toEye.normalized, frame.cameraPose.rotation * Vector3.up);
         t.localScale = Vector3.one * (baseWorldSize * Mathf.Max(scale, 0.05f));
-
         _renderer.color = new Color(tint.r, tint.g, tint.b, alpha);
-        _renderer.enabled = true;
+        _renderer.enabled = model3D == null; // 有 3D 模型 → 精灵贴图让位
+
+        // ── 3D 模型路径（火柴人占位 / 组员正式模型）──
+        var visual = DebounceAnim(animState); // 引导↔陪伴抖动去抖，姿势不闪
+        if (model3D != null)
+        {
+            if (_stick == null) model3D.SetActive(true);
+            var mt = model3D.transform;
+            mt.position = _renderWorldPos;
+
+            // 朝向：指数平滑 Slerp（吸收头姿微抖）
+            Vector3 toEyeFlat = frame.cameraPose.position - _renderWorldPos;
+            toEyeFlat.y = 0f;
+            if (toEyeFlat.sqrMagnitude > 1e-4f)
+            {
+                var want = Quaternion.LookRotation(toEyeFlat.normalized, Vector3.up);
+                _renderRot = _hasRenderRot && rotationSmoothTime > 0.01f
+                    ? Quaternion.Slerp(_renderRot, want, Mathf.Clamp01(Time.deltaTime / rotationSmoothTime))
+                    : want;
+                _hasRenderRot = true;
+                mt.rotation = _renderRot;
+            }
+
+            // 尺寸：按原生身高归一 + 出场随 alpha 柔和放大
+            float fade = Mathf.Clamp01(alpha * 1.5f);
+            float modelScale = baseWorldSize * scale / Mathf.Max(0.01f, modelNativeHeight) * fade;
+            mt.localScale = Vector3.one * Mathf.Max(modelScale, 0.01f);
+
+            if (_stick != null) _stick.SetVisuals(visual, alpha, tint); // 火柴人：姿态+透明度全平滑
+            DriveAnimator(visual);
+        }
+
+        // 诊断日志（1Hz 节流）：锚点 vs 渲染位置 vs 目标——真机排查"抖/闪"用
+        if (Time.unscaledTime - _lastDiagTime > 1f)
+        {
+            _lastDiagTime = Time.unscaledTime;
+            string roomInfo = mruk != null && mruk.TryGetRoomBounds(out var rb)
+                ? $"房间[{rb.min.ToString("F1")}~{rb.max.ToString("F1")}]" : "无房间数据";
+            Debug.Log($"[IP] vis={visible} alpha={alpha:F2} scale={scale:F2} 锚={_lastWorldPos.ToString("F2")} " +
+                      $"渲染={_renderWorldPos.ToString("F2")} tgt有效={targetValid} 重建距={Vector3.Distance(_lastWorldPos, _renderWorldPos):F3}m " +
+                      $"camPos={frame.cameraPose.position.ToString("F2")} height01={height01:F3} {roomInfo}");
+        }
     }
 
-    /// <summary>程序生成占位精灵（64×64 紫色圆脸 + 眼睛 + 白圈），与电脑版同款。</summary>
+    void EnsureStick()
+    {
+        if (_stickChecked) return;
+        _stickChecked = true;
+        if (model3D != null) _stick = model3D.GetComponentInChildren<StickFigureIp>(true);
+    }
+
+    /// <summary>视觉状态去抖：引导↔陪伴需持续 0.18s 才切换（注视抽动不致姿势乱闪）；瞬时态（登场/反馈/探头/隐藏）放行。</summary>
+    IPAnimState DebounceAnim(IPAnimState want)
+    {
+        if (want == _visualAnim) { _pendingAnimT = 0f; return _visualAnim; }
+        bool transient = want == IPAnimState.Hidden || _visualAnim == IPAnimState.Hidden
+                      || want == IPAnimState.Appearing || _visualAnim == IPAnimState.Appearing
+                      || want == IPAnimState.Feedback || _visualAnim == IPAnimState.Feedback
+                      || want == IPAnimState.Peek || _visualAnim == IPAnimState.Peek;
+        if (transient) { _pendingAnimT = 0f; _visualAnim = want; return _visualAnim; }
+        if (want != _pendingAnim) { _pendingAnim = want; _pendingAnimT = 0f; }
+        _pendingAnimT += Time.deltaTime;
+        if (_pendingAnimT >= 0.18f) { _visualAnim = want; _pendingAnimT = 0f; }
+        return _visualAnim;
+    }
+
+    IPAnimState _prevVisual = IPAnimState.Hidden;
+
+    /// <summary>C：把动画状态翻译成 Animator 参数（参数名=需求文档动画名；仅在状态切换时触发）。</summary>
+    void DriveAnimator(IPAnimState visual)
+    {
+        if (animator == null || _prevVisual == visual) return;
+        _prevVisual = visual;
+        animator.SetBool("Flying", visual != IPAnimState.Hidden);
+        animator.SetBool("Companion", visual == IPAnimState.Companion);
+        switch (visual)
+        {
+            case IPAnimState.Appearing: animator.SetTrigger("Appear"); break;
+            case IPAnimState.Feedback: animator.SetTrigger("Feedback"); break;
+            case IPAnimState.Peek: animator.SetTrigger("Peek"); break;
+        }
+    }
+
+    /// <summary>程序生成占位精灵（64×64 紫色圆脸 + 眼睛 + 白圈），无 3D 模型时的回退。</summary>
     static Sprite CreatePlaceholderSprite()
     {
         const int s = 64;

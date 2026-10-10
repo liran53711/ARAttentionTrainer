@@ -8,6 +8,7 @@ using Unity.InferenceEngine;
 using UnityEngine;
 using UnityEngine.UI;
 using Meta.XR;
+using Meta.XR.MRUtilityKit;
 
 public static class DeviceSceneCreator
 {
@@ -17,6 +18,9 @@ public static class DeviceSceneCreator
     const string RigPrefabPath = "Packages/com.meta.xr.sdk.core/Prefabs/OVRCameraRig.prefab";
     const string LineTargetMatPath = "Assets/Materials/BoxTarget.mat";
     const string LineOtherMatPath = "Assets/Materials/BoxOther.mat";
+    const string OccluderMatPath = "Assets/Materials/MaskErase.mat";
+    /// <summary>遮挡（MaskOccluder）总开关——2026-10-11 用户定调"难做就不要了"，默认关。</summary>
+    const bool EnableOcclusion = false;
 
     [MenuItem("ARAttention/Device/Create Device Scene")]
     public static void CreateDeviceScene()
@@ -71,8 +75,10 @@ public static class DeviceSceneCreator
         pca.TexturePropertyName = "_BaseMap";
         var source = camGO.AddComponent<PcaFrameSource>();
 
-        // ── 7) 权限流（相机权限弹窗 + 轮询）──
+        // ── 7) 权限流（相机 + 空间数据权限弹窗 + 轮询）──
         rigGO.AddComponent<PermissionFlow>();
+        // ── 7.5) 空间数据（MRUK）：启动加载/扫描，为射线定距与 3D 精灵房间锚定铺垫 ──
+        rigGO.AddComponent<MrukBootstrap>();
 
         // ── 8) 检测 + VAD + 音效 + M3 总装（真机模式）──
         var detector = camGO.AddComponent<FaceDetector>();
@@ -80,12 +86,14 @@ public static class DeviceSceneCreator
         detector.settings = settings;
 
         var audio = camGO.AddComponent<AudioCuePlayer>();
+        var voice = camGO.AddComponent<VoiceCuePlayer>(); // 语音指导（Resources/Voice/*.mp3）
         var vad = camGO.AddComponent<MicVadService>();
 
         var driver = camGO.AddComponent<M3DebugDriver>();
         driver.detector = detector;
         driver.settings = settings;
         driver.audioPlayer = audio;
+        driver.voiceCue = voice;
         driver.vadService = vad;
         driver.simulateGazeWithKeyboard = false; // 真机：几何注视代理（脸在视野中心+新鲜度）
         driver.useMicVad = true;                 // 真机：真实麦克风 VAD
@@ -128,12 +136,57 @@ public static class DeviceSceneCreator
         panel.detector = detector;
         panel.vad = vad;
         panel.driver = driver;
+        panel.mruk = rigGO.GetComponent<MrukBootstrap>();
         panel.text = txt;
 
         // ── 10.5) 世界空间 IP（小精灵）：贴合老师头部 —— 驱动层与电脑版共用同一套动画状态
         var ipWorld = camGO.AddComponent<IPWorldView>();
         ipWorld.frameSource = source;
+        ipWorld.detector = detector;
+        ipWorld.mruk = rigGO.GetComponent<MrukBootstrap>(); // 空间围栏：锚点不出房间
         driver.ipWorldView = ipWorld;
+
+        // ── 10.6) 人体轮廓分割（陪伴模式：精灵沿真实轮廓贴合互动）
+        var seg = camGO.AddComponent<SelfieSegRunner>();
+        seg.frameSource = source;
+        seg.modelAsset = AssetDatabase.LoadAssetAtPath<ModelAsset>("Assets/Models/selfie_seg_landscape.onnx");
+        if (seg.modelAsset == null)
+            Debug.LogWarning("[DeviceScene] 未找到 selfie_seg_landscape.onnx（轮廓贴合暂不可用）");
+        ipWorld.seg = seg;
+
+        // ── 10.7) A：人物遮挡（屏幕空间擦除）——2026-10-11 用户定调："遮挡难做就不要了"
+        // 默认关闭：Scene 里不再生成 MaskOccluder（MaskOccluder.cs / MaskErase.shader 保留，
+        // 想再试把 EnableOcclusion 改 true 重建场景即可）。
+        if (EnableOcclusion)
+        {
+            var occGO = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            occGO.name = "MaskOccluder";
+            Object.DestroyImmediate(occGO.GetComponent<Collider>());
+            occGO.transform.SetParent(rig.centerEyeAnchor, false);
+            occGO.GetComponent<MeshRenderer>().sharedMaterial = EnsureShaderMaterial(OccluderMatPath, "ARAttention/MaskErase");
+            var occluder = occGO.AddComponent<MaskOccluder>();
+            occluder.seg = seg;
+            occluder.frameSource = source;
+            occluder.pca = pca;
+            occluder.eyeCamera = centerCam;
+            Debug.Log("[DeviceScene] 遮挡（MaskOccluder）已启用");
+        }
+        else
+        {
+            Debug.Log("[DeviceScene] 遮挡（MaskOccluder）未启用——用户定调 2026-10-11（代码保留，开关 EnableOcclusion）");
+        }
+
+        // ── 10.8) B：环境射线（MRUK 深度 → 实测距离）
+        var envRay = rigGO.AddComponent<EnvironmentRaycastManager>();
+        ipWorld.envRaycast = envRay;
+
+        // ── 10.9) C：3D 模型接口节点（2026-10-11：火柴人占位——IP_Model3D 即"建模接入点"）
+        // 组员正式模型到位后：把 IP_Model3D 换成 FBX 根节点（或直接改 model3D 引用），其余逻辑不变。
+        var modelGO = BuildStickFigureIp();
+        modelGO.transform.SetParent(rigGO.transform, false);
+        ipWorld.model3D = modelGO;
+        ipWorld.modelNativeHeight = 0.74f; // 火柴人实际身高 0.74m（原点=身体几何中心）；组员 FBX 按 0.35m 身高填 0.35
+        // animator 留空走 StickFigureIp 程序化姿态；组员模型（带 Animator）到位后在此赋值即可接管
 
         // ── 11) 保存 ──
         if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
@@ -161,6 +214,35 @@ public static class DeviceSceneCreator
         mat.color = color; // URP/Unlit 的 [MainColor] _BaseColor
         EditorUtility.SetDirty(mat);
         return mat;
+    }
+
+    /// <summary>按名称创建/加载材质资产（被场景引用 → 着色器进包不被裁剪）。</summary>
+    static Material EnsureShaderMaterial(string path, string shaderName)
+    {
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (mat != null) return mat;
+        if (!AssetDatabase.IsValidFolder("Assets/Materials"))
+            AssetDatabase.CreateFolder("Assets", "Materials");
+        var shader = Shader.Find(shaderName);
+        if (shader == null)
+        {
+            Debug.LogError($"[DeviceScene] 找不到着色器 {shaderName}，回退 URP/Unlit");
+            shader = Shader.Find("Universal Render Pipeline/Unlit");
+        }
+        mat = new Material(shader);
+        AssetDatabase.CreateAsset(mat, path);
+        return mat;
+    }
+
+    /// <summary>C 项占位 3D 精灵（2026-10-11 用户定调）：火柴人——组员正式建模的"接口节点 IP_Model3D"。
+    /// 骨架/姿态由 StickFigureIp 运行时程序化搭建与平滑驱动；本方法只注入材质（资产被场景引用→着色器进包）。</summary>
+    static GameObject BuildStickFigureIp()
+    {
+        var root = new GameObject("IP_Model3D");
+        var stick = root.AddComponent<StickFigureIp>();
+        stick.bodyMaterial = EnsureLineMaterial("Assets/Materials/IpBody.mat", new Color(0.62f, 0.47f, 1f));
+        stick.eyeMaterial = EnsureLineMaterial("Assets/Materials/IpEye.mat", new Color(0.12f, 0.10f, 0.20f));
+        return root;
     }
 
     static void Stretch(RectTransform rt, float padX = 0f, float padY = 0f)

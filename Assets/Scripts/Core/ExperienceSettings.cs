@@ -76,6 +76,11 @@ public class ExperienceSettings : ScriptableObject
     [Tooltip("麦克风不可用时：注视累计满这么久直接给反馈（替代'讲话结束'条件）")]
     public float micFallbackFeedbackGazeSeconds = 5f;
 
+    [Header("开场吸引（用户定调 2026-10-10）")]
+    [Tooltip("应用启动即进入引导（精灵立即出现、带孩子四处找老师），不等讲话；" +
+             "持续到首次检测到目标或超过此时长（秒）。0=关闭")]
+    public float startupAttractionSeconds = 25f;
+
     public static readonly string[] LevelNames = { "强", "中", "弱" };
     public string CurrentLevelName => LevelNames[Mathf.Clamp(interventionLevel, 0, 2)];
 
