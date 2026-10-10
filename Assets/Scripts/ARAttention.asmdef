@@ -3,7 +3,9 @@
     "rootNamespace": "",
     "references": [
         "Unity.InferenceEngine",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Oculus.VR",
+        "meta.xr.mrutilitykit"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -3,7 +3,14 @@
     "rootNamespace": "",
     "references": [
         "ARAttention",
-        "Unity.InferenceEngine"
+        "Unity.InferenceEngine",
+        "Oculus.VR",
+        "Oculus.VR.Editor",
+        "meta.xr.mrutilitykit",
+        "Unity.XR.Management",
+        "Unity.XR.Management.Editor",
+        "Unity.XR.OpenXR",
+        "Unity.XR.OpenXR.Editor"
     ],
     "includePlatforms": [
         "Editor"

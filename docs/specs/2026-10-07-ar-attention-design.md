@@ -149,6 +149,27 @@ ExperienceSettings）。实现位置：M3DebugDriver 的 IP 动画层（不改�
 - 分辨率选 1280×960（v74+ 上限；更高需 Horizon OS v83）；~30fps，端到端延迟 40-60ms
 - 左右相机均可访问；MVP 用单侧（默认右/实验确定哪侧更接近儿童视角中心）
 
+### 4.1.1 真机取帧与权限（2026-10-10 落地）
+
+**帧源抽象**：`FrameSourceBehaviour` 统一接口——电脑端 `VideoFileFrameSource`（视频文件）、真机 `PcaFrameSource`（包装 MRUK 的 `PassthroughCameraAccess`）。上层（检测/跟踪/驱动）完全不感知差异，同一套 M3 逻辑两边跑。
+
+**权限链路（源码级验证）**：
+- manifest 权限 `horizonos.permission.HEADSET_CAMERA` **无需手写**——构建时 `OVRManifestPreprocessor` 依据 `OculusProjectConfig` 两个开关自动生成：`insightPassthroughSupport != None` + `isPassthroughCameraAccessEnabled == true`（`MRProjectSetup.Apply()` 负责设置）
+- 运行时弹窗走 `OVRPermissionsRequester.Request(PassthroughCameraAccess)`（`PermissionFlow` 组件，轮询 60s）——**M1 只请求相机权限**（Scene 权限等用到 MRUK 锚点再加，少一个弹窗→少一次误点"拒绝"的机会）
+- `PassthroughCameraAccess` **自带等待**：无权限时 `OnEnable` 起协程逐帧检查，授权后自动开播，无需外部开关组件
+- ⚠️ 权限弹窗若"全部拒绝"，应用不可恢复（须卸载重装）——正式版 UI 需大字提示
+
+**XR 路线（SDK v207 的 Required 级要求）**：Unity OpenXR 1.18.0（v74+ 官方弃用 OculusXR 插件路线）＋ Android 端 OpenXR Loader ＋ 两个功能：**Meta XR Feature**（`com.meta.openxr.feature.metaxr`，SDK 提供 OVRPlugin-over-OpenXR）与 **Meta Quest Support**（`com.unity.openxr.feature.metaquest`，Unity 提供 Quest 构建配置）。批量配置由 `XRRuntimeSetup.Apply()` 完成（对应 `OVRProjectSetupXRTasks` 工具规则）。
+
+**透视显示**：运行时 `OVRManager.isInsightPassthroughEnabled = true` + 中心眼相机 `clearFlags=SolidColor、backgroundColor α=0`（透明背景→透视透出）。ARM64 架构为透视硬性要求。
+
+**真机场景 Device.unity**（`DeviceSceneCreator` 生成）：OVRCameraRig（含上述透视配置）＋ PassthroughCamera 帧源 ＋ 权限流 ＋ 检测/VAD/M3 驱动（键盘模拟关闭、麦克风 VAD 开启）＋ 右下"监视器"浮窗（PCA `TargetMaterial` 自动刷相机纹理，供 M1 验收与调试）。
+
+**M1 首测踩坑记录（2026-10-10 实测，均已自动修复）**：
+- **URP HDR 必须关闭**：HDR 开启时眼缓冲为 R10G10B10A2（无有效 alpha），透明背景失效 → 透视被不透明黑覆盖。`MRProjectSetup` 已自动关 HDR（官方 URP 透视要求清单：HDR 关 / Post-processing 关 / Intermediate Texture=Auto）
+- **URP Unlit 的纹理属性是 `_BaseMap`**：PCA 默认写 `_MainTex` 在 URP 中不生效 → 监视器面板纯白。`DeviceSceneCreator` 已设 `TexturePropertyName = "_BaseMap"`
+- 排查依据：`adb logcat` 里 `[Insight MR] Successfully initialized passthrough`（初始化成功）+ `MRUK Shared: Camera started`（相机在流）+ 采样日志 `targetValid=1`（检测链路全通）——三链路各自独立验证，把问题精确定位到"渲染合成"层
+
 ### 4.2 人脸检测（Sentis + YOLOv9）
 - 预处理照官方样例：`TextureConverter.ToTensor(tex, tensor, new TextureTransform().SetDimensions(w,h,3))`（GPU侧）→ `worker.Schedule` → `((Tensor<float>)worker.PeekOutput(0)).ReadbackAndCloneAsync()`（**禁用阻塞版 ReadbackAndClone**）
 - **启动时 `PreloadModel()`**（2×2 dummy 推理）——首次推理会阻塞数秒编译 compute shader
