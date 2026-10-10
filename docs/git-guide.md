@@ -1,7 +1,7 @@
 # Git 流程卡（团队协作手册）
 
-> 适用：ARAttentionTrainer 全体成员 ｜ 更新：2026-10-08
-> ⚡ 状态：本地版本管理已启用；云端 GitHub 仓库待建（等代理节点恢复后补，见第三节）
+> 适用：ARAttentionTrainer 全体成员 ｜ 更新：2026-10-10
+> ✅ 状态：本地 + 云端**全部启用**。云端仓库：https://github.com/liran53711/ARAttentionTrainer （Private）
 
 ## 一、核心概念（30 秒）
 
@@ -28,20 +28,18 @@ git push                      # ④ 上传云端（云端仓库建好后可用�
 | `git add <文件>` | 只暂存某个文件（`-A` 是全部） |
 | `git pull` | 拉取云端新存档（**每次开工前先敲**） |
 
-## 四、云端仓库（⚡ 待办：代理节点恢复后执行）
+## 四、云端仓库（✅ 已完成 2026-10-10）
 
-1. github.com → **+** → New repository → 名称 `ARAttentionTrainer` → **Private** → 三个初始化勾**全不勾** → Create
-2. 绑定并首次推送（只做一次）：
+- 云端仓库：**https://github.com/liran53711/ARAttentionTrainer**（Private）
+- 本机已绑定 `origin` 并完成首次推送（8 次提交已在云端）
+- ⚠️ **本机代理配置**：git 走 `http://127.0.0.1:7897`（Clash 端口，若端口变化需同步改）
 
-```bash
-cd /d/Development/Unity/ARAttentionTrainer
-git remote add origin https://github.com/<用户名>/ARAttentionTrainer.git
-git push -u origin main
-# 弹窗选 "Sign in with your browser" 浏览器授权
-```
+**组员接入（在仓库网页操作 + 组员本地操作）：**
 
-3. 邀请组员：仓库网页 → Settings → Collaborators → Add people（输组员 GitHub 用户名）
-4. 组员首次使用：`git clone <仓库地址>` → Unity Hub 添加该文件夹 → 以后开工前 `git pull`
+1. 仓库网页 → Settings → Collaborators → Add people（输组员 GitHub 用户名）
+2. 组员首次：`git clone https://github.com/liran53711/ARAttentionTrainer.git`
+   → Unity Hub 添加该文件夹 → 以后每次开工前先 `git pull`
+3. 组员本机若在国内：clone/push 需要代理（方法同上：`git config --global http.proxy http://127.0.0.1:<端口>`）
 
 ## 五、提交规范
 
