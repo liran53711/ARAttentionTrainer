@@ -39,6 +39,13 @@ public class AudioCuePlayer : MonoBehaviour
         if (clip != null) _source.PlayOneShot(clip);
     }
 
+    /// <summary>运行时调整音量（干预档位联动：强 1.0 / 中 0.6 / 弱 0.15）。</summary>
+    public void SetVolume(float v)
+    {
+        volume = Mathf.Clamp01(v);
+        if (_source != null) _source.volume = volume;
+    }
+
     /// <summary>把一串 (频率, 时长) 合成为一个音频片段；每段带 20ms 淡入淡出防爆音。</summary>
     static AudioClip BuildTone(string name, (float freq, float dur)[] notes)
     {

@@ -24,12 +24,25 @@ public struct InteractionInputs
 
 public class InteractionStateMachine
 {
-    readonly float _reGuideCooldownSec;
+    float _reGuideCooldownSec;
     readonly float _feedbackDurationSec;
     readonly float _feedbackCooldownSec;
     readonly float _idleTimeoutSec;
     readonly float _speechEndGraceSec;
     readonly float _lookAwayGraceSec;
+
+    /// <summary>重新引导冷却（运行时可按干预档位调整：强3s/中5s/弱8s）。</summary>
+    public float ReGuideCooldownSeconds
+    {
+        get => _reGuideCooldownSec;
+        set
+        {
+            _reGuideCooldownSec = Mathf.Max(0f, value);
+            // 档位切换即时生效：运行中的冷却等待按新上限收窄——切到更强档立即能更快重导
+            if (_guideCooldownTimer > _reGuideCooldownSec)
+                _guideCooldownTimer = _reGuideCooldownSec;
+        }
+    }
 
     float _guideCooldownTimer;
     float _feedbackCooldownTimer;

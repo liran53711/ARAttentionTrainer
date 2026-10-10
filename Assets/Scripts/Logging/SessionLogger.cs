@@ -17,7 +17,8 @@ public class SessionLogger
 
     public string SessionDir { get; }
 
-    public SessionLogger(string rootDir, string childName = "", string ipName = "", int interventionLevel = 1)
+    public SessionLogger(string rootDir, string childName = "", string ipName = "",
+                         int interventionLevel = 1, string settingsJson = null)
     {
         SessionDir = Path.Combine(rootDir, "sessions", BuildSessionFolderName(DateTime.Now));
         Directory.CreateDirectory(SessionDir);
@@ -34,7 +35,11 @@ public class SessionLogger
         meta.Append("\"ipName\":\"").Append(Escape(ipName)).Append("\",");
         meta.Append("\"interventionLevel\":").Append(interventionLevel).Append(',');
         meta.Append("\"app\":\"ARAttentionTrainer\",");
+        meta.Append("\"version\":\"").Append(Escape(Application.version)).Append("\",");
+        meta.Append("\"device\":\"").Append(Escape(SystemInfo.deviceModel)).Append("\",");
         meta.Append("\"unity\":\"").Append(Application.unityVersion).Append("\"");
+        if (!string.IsNullOrEmpty(settingsJson))
+            meta.Append(",\"settings\":").Append(settingsJson); // 参数快照：实验可复现（SessionLogger 只透传，不知语义）
         meta.Append('}');
         File.WriteAllText(Path.Combine(SessionDir, "session.json"), meta.ToString(), Encoding.UTF8);
     }

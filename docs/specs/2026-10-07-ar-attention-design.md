@@ -128,6 +128,8 @@ PCA相机帧 ─► FaceDetector(隔帧推理) ─► TargetTracker(深度射线
 | 引导冷却 | 3s | 5s | 8s |
 
 > 注：弱档设计为"提示更少、要求更高、频率更低"，具体数值在 M4 联调时按体验调整；"根据表现自动降档"为结题后增强项（依赖 M5 数据）。
+>
+> **实现（2026-10-10）**：档位表固化在 `ExperienceSettings.ApplyLevel`；真机**手柄 A/X 键**、电脑**键盘 1/2/3** 循环切档；切换即时生效（GazeLogic 起始阈值 / 状态机重导冷却 / 音效音量 / 精灵尺寸），数据面板显示当前档位，并记 `LevelChange` 事件。
 
 ---
 
@@ -168,6 +170,7 @@ ExperienceSettings）。实现位置：M3DebugDriver 的 IP 动画层（不改�
 **M1 首测踩坑记录（2026-10-10 实测，均已自动修复）**：
 - **URP HDR 必须关闭**：HDR 开启时眼缓冲为 R10G10B10A2（无有效 alpha），透明背景失效 → 透视被不透明黑覆盖。`MRProjectSetup` 已自动关 HDR（官方 URP 透视要求清单：HDR 关 / Post-processing 关 / Intermediate Texture=Auto）
 - **URP Unlit 的纹理属性是 `_BaseMap`**：PCA 默认写 `_MainTex` 在 URP 中不生效 → 监视器面板纯白。`DeviceSceneCreator` 已设 `TexturePropertyName = "_BaseMap"`
+- **必须显式提交透视图层（M1 最终修复项，最关键）**：仅有"透明背景 + isInsightPassthroughEnabled"不够——合成器日志 `PT is: ON numLayers: 0`（应用没有提交任何透视图层）时系统会把透视渲染整个熄掉（`renderIteration: PT is: OFF`）→ 眼缓冲透明区露出的是虚无（黑）。修复：场景中挂 **`OVRPassthroughLayer`** 组件（向合成器提交 Underlay 层），M1 随即验收通过
 - 排查依据：`adb logcat` 里 `[Insight MR] Successfully initialized passthrough`（初始化成功）+ `MRUK Shared: Camera started`（相机在流）+ 采样日志 `targetValid=1`（检测链路全通）——三链路各自独立验证，把问题精确定位到"渲染合成"层
 
 ### 4.2 人脸检测（Sentis + YOLOv9）
@@ -183,7 +186,8 @@ ExperienceSettings）。实现位置：M3DebugDriver 的 IP 动画层（不改�
 
 1. **M3 起步（零成本，优先做）**：用"人框的上部中心"作为头部/面部位置的启发式——取框顶部往下约 25% 高度的水平中心点。引导目标、躲藏位、方向锚全部使用该点。
 2. **增强步骤（M3 之后视时间）**：替换为**人脸专用模型**（首选 BlazeFace——Unity 官方 Sentis 示例自带；备选 YuNet/MIT）。架构已为模型替换做好准备：`DetectionResult` 与具体模型解耦，仅需新增一个解析分支 + 换模型资产。
-3. **"识别特定的人"（结题增强 / 论文展望，不入 MVP）**：三条路线——①空间锁定（1对1对坐场景 = 最大最居中 + 时序滞回，M3 已规划）；②外观记忆（颜色特征找回，行为上近似"认识"）；③真实人脸识别（embedding + 预录入照片；涉及儿童隐私与伦理，列入 Future Work）。
+3. **实例分割（2026-10-10 用户定调为最终目标之一）**：人/脸轮廓分割，让虚拟精灵与真实人脸"贴合"（沿轮廓探头、躲藏、轮廓发光等）。首选 **YOLOv9-seg**（与现检测器同族，Sentis 兼容性好、接口改动最小）。下游演进：`DetectionResult` 增加**可选 mask 字段**（默认无，现有管线不受影响）；`IPWorldView` 后续按轮廓计算遮挡与探头位。
+4. **"识别特定的人"（结题增强 / 论文展望，不入 MVP）**：三条路线——①空间锁定（1对1对坐场景 = 最大最居中 + 时序滞回，M3 已规划）；②外观记忆（颜色特征找回，行为上近似"认识"）；③真实人脸识别（embedding + 预录入照片；涉及儿童隐私与伦理，列入 Future Work）。
 
 ### 4.3 人脸 3D 位置估计（"空间粗定位 + 视觉精定位"）
 1. **主路径**：`ViewportPointToRay(bboxCenter, cachedPose)` → `EnvironmentRaycastManager.Raycast` → 命中点即真实米制距离 → 位置 = pose.position + dir × dist
@@ -197,6 +201,7 @@ ExperienceSettings）。实现位置：M3DebugDriver 的 IP 动画层（不改�
 - 起始 2 秒静音校准噪声底；运行时对噪声底做慢跟踪（适应教室环境）
 - 滞回阈值 + 最短语音段 + 停顿桥接（见 3.2 表）
 - 麦克风不可用时：**降级为"始终引导"模式**（speaking 恒真）——此时"讲话结束"条件失效，改用替代规则：**注视持续满 5s 即进入反馈**（该替代规则同样写入 ExperienceSettings 可调）
+  > **实现（2026-10-10）**：`M3DebugDriver` 检测到麦克风不可用即进降级；注视累计满 `micFallbackFeedbackGazeSeconds`（默认 5s）合成一次"讲话结束"边沿触发反馈（每轮 Hidden 一次）；记 `MicFallback` 事件，数据可追溯使用了降级规则。
 
 ---
 
@@ -209,6 +214,8 @@ ExperienceSettings）。实现位置：M3DebugDriver 的 IP 动画层（不改�
 | 会话级 | sessionId、开始/结束时间戳、时长、干预档位、儿童昵称、IP 昵称、设备/版本 |
 | 事件级 | 引导出现（触发原因、老师距离/方位）、开始注视、注视达成、反馈发出、讲话段起止、**反应时间**（引导出现→开始注视的间隔）、目标切换/丢失 |
 | 采样级（每2秒） | looking(bool)、speaking(bool)、anchorValid(bool)、距离(m)、FPS、检测延迟(ms) |
+
+> **实现（2026-10-10）**：session.json 增加 `version`（应用版本）/ `device`（设备型号）/ `settings`（完整参数快照——实验可复现，含档位与各项阈值）。PC 侧工具（`tools/`）：`pull_sessions.sh` 一键拉取设备数据到 `data/`（已 gitignore）；`analyze_sessions.py` 生成 summary.md/csv + 每会话行为/状态/性能图（含合成数据自测）。
 
 **导出**：MQDH 文件浏览器或 `adb pull` 拉到电脑 → `tools/analytics/` 下 Python 脚本聚合（专注时长占比、平均反应时间、引导次数趋势、各档位对比）→ 出图（结题报告/论文直接用）。
 
@@ -259,6 +266,10 @@ ExperienceSettings）。实现位置：M3DebugDriver 的 IP 动画层（不改�
 | M6 | 11/28-12/20 | 现场实测（苏州）、按数据调参、结题报告+PPT+论文 | 学校测试完成、数据报告、结题材料齐 |
 
 **预留缓冲**：M6 含约1周缓冲；若前序延期，优先砍弱档细节而非核心循环。
+
+> 📌 **路线权威（2026-10-10 用户确认）**：对外路线以最终版中期答辩 PPT `D:\大创\中期答辩\revise1.1(1)(1).pptx`（第 13 页）为准——改进视觉引导（6月）→ 语音识别模块·检测说话状态（7月）→ 数据收集系统（8月）→ 集成+实地测试（9-11月）→ 结题（12月）；结题交付 = 完整系统 + ≥20 名 ASD 儿童测试数据 + 1-2 篇论文 + 可运行原型。本表 M1-M6 是内部执行分解，对外口径用 PPT 说法。
+> 📌 **进度（2026-10-10）**：M1 ✅ 真机透视验收；M2 ✅ 检测真机 190ms；M3 大部分 ✅（状态机/VAD/日志双端验证）——**当前执行 M3 收尾 = 世界空间 IP（官方路线"改进视觉引导"的核心）**。
+> 📌 **实例分割（2026-10-10 用户定调）**：最终要做实例分割，让虚拟精灵与真实人脸的交互更贴合（沿脸轮廓探头/躲藏等）。技术候选：**YOLOv9-seg**（与现检测器同族、接口改动最小）> 其他方案待评估；下游为 `DetectionResult` 预留可选 mask 字段。列为视觉引导增强项。
 
 ---
 

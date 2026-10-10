@@ -8,9 +8,16 @@ using UnityEngine;
 
 public class GazeLogic
 {
-    readonly float _startSeconds;
+    float _startSeconds;
     readonly float _sustainSeconds;
     readonly float _decayRate;
+
+    /// <summary>开始注视阈值（运行时可按干预档位调整；降低后未触发的阈值会自动解锁重试）。</summary>
+    public float StartSeconds
+    {
+        get => _startSeconds;
+        set => _startSeconds = Mathf.Max(0.05f, value);
+    }
 
     public float Dwell { get; private set; }
     public bool Looking { get; private set; }

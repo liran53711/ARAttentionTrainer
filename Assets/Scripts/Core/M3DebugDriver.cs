@@ -10,7 +10,8 @@ public class M3DebugDriver : MonoBehaviour
     [Header("引用")]
     public FaceDetector detector;
     public ExperienceSettings settings;
-    public IPDebugView ipView;
+    public IPDebugView ipView;          // 电脑端（OnGUI）
+    public IPWorldView ipWorldView;     // 真机（世界空间）——两者二选一
     public AudioCuePlayer audioPlayer;
     public MicVadService vadService;
 
@@ -27,11 +28,21 @@ public class M3DebugDriver : MonoBehaviour
     InteractionStateMachine _sm;
     SessionLogger _logger;
 
+    // 只读对外状态（真机数据面板 DeviceDataPanel 用）
+    public float SmoothFps => _fpsSmooth;
+    public InteractionState State => _sm != null ? _sm.State : InteractionState.Idle;
+    public float GazeDwell => _gaze != null ? _gaze.Dwell : 0f;
+    public string LevelName => settings != null ? settings.CurrentLevelName : "--";
+    public int CurrentLevel => settings != null ? settings.interventionLevel : 1;
+    float FallbackGazeSec => settings != null ? settings.micFallbackFeedbackGazeSeconds : 5f;
+
     // 模拟输入状态
     bool _speaking = true;        // 默认"老师在讲话"
     bool _prevSpeaking = true;
     bool _prevTargetValid;
     bool _simLooking;             // K 键：模拟"孩子在注视"
+    bool _fallbackFired;          // 麦克风降级：本轮 Hidden 已用替代规则触发过反馈
+    bool _micFallbackLogged;      // 降级事件每会话只记一次
 
     // IP 动画运行时
     enum IpAnim { Hidden, Appearing, GuidingMove, Hiding, FeedbackPulse, Peek }
@@ -50,6 +61,7 @@ public class M3DebugDriver : MonoBehaviour
 
     void Start()
     {
+        if (settings != null) settings.ApplyLevel(settings.interventionLevel); // 档位表→阈值字段（须在构造之前）
         _sm = settings != null
             ? new InteractionStateMachine(settings.reGuideCooldownSeconds, settings.feedbackDurationSeconds)
             : new InteractionStateMachine();
@@ -58,14 +70,34 @@ public class M3DebugDriver : MonoBehaviour
             settings != null ? settings.gazeStartSeconds : 0.8f,
             settings != null ? settings.gazeSustainSeconds : 2f);
 
-        _logger = new SessionLogger(Application.persistentDataPath);
+        CreateLogger();
         _logger.LogEvent("SessionStart");
+        if (audioPlayer != null) audioPlayer.SetVolume(settings != null ? settings.cueVolumeScale : 0.6f);
         Debug.Log($"[M3] 会话数据目录：{_logger.SessionDir}");
-        string speechMode = (useMicVad && vadService != null && vadService.MicRunning)
-            ? "麦克风VAD（对着麦克风讲话＝老师在说话）"
+        Debug.Log($"[M3] 干预档位：{LevelName}（gazeStart {settings?.gazeStartSeconds:0.0}s / 冷却 {settings?.reGuideCooldownSeconds:0.0}s / Peek {settings?.peekIntervalSeconds:0.0}s）");
+        string speechMode = (useMicVad && vadService != null)
+            ? "麦克风VAD（若麦克风不可用→自动降级为'始终引导'）"
             : "键盘L模拟";
         Debug.Log($"[M3] 讲话输入：{speechMode}");
-        Debug.Log("[M3] 键盘：K=切换模拟注视 | L=切换模拟讲话(仅无麦时) | R=重置会话");
+        Debug.Log("[M3] K=模拟注视 | L=模拟讲话(仅无麦时) | 1/2/3=切档位 | R=重置 | 真机：手柄A键循环切档");
+    }
+
+    void CreateLogger()
+        => _logger = new SessionLogger(Application.persistentDataPath, "", "",
+            settings != null ? settings.interventionLevel : 1,
+            settings != null ? settings.SnapshotJson() : null);
+
+    /// <summary>切换干预档位（真机手柄 A/X 键循环；电脑键盘 1/2/3）。参数即时生效并记录事件。</summary>
+    void SwitchLevel(int level)
+    {
+        if (settings == null) return;
+        settings.ApplyLevel(level);
+        if (_gaze != null) _gaze.StartSeconds = settings.gazeStartSeconds;
+        if (_sm != null) _sm.ReGuideCooldownSeconds = settings.reGuideCooldownSeconds;
+        if (audioPlayer != null) audioPlayer.SetVolume(settings.cueVolumeScale);
+        _logger?.LogEvent("LevelChange", settings.CurrentLevelName);
+        Debug.Log($"[M3] 干预档位 → {settings.CurrentLevelName}" +
+                  $"（gazeStart {settings.gazeStartSeconds:0.0}s / 冷却 {settings.reGuideCooldownSeconds:0.0}s / Peek {settings.peekIntervalSeconds:0.0}s）");
     }
 
     void Update()
@@ -74,21 +106,43 @@ public class M3DebugDriver : MonoBehaviour
         if (dt <= 0f) dt = 1f / 60f;
         _fpsSmooth = Mathf.Lerp(_fpsSmooth, 1f / dt, 0.05f);
 
-        // ── 输入：注视（键盘K模拟）+ 讲话（麦克风VAD优先，键盘L回退）──
+        // ── 输入：注视（键盘K模拟）+ 讲话（麦克风VAD优先 → 降级模式 → 键盘L）──
         bool vadActive = useMicVad && vadService != null && vadService.MicRunning;
+        bool micFallback = useMicVad && vadService != null && !vadService.MicRunning && !simulateGazeWithKeyboard;
         var kb = Keyboard.current;
         if (kb != null)
         {
             if (kb.kKey.wasPressedThisFrame) _simLooking = !_simLooking;
             if (kb.lKey.wasPressedThisFrame && !vadActive) _speaking = !_speaking;
+            if (kb.digit1Key.wasPressedThisFrame) SwitchLevel(0);
+            if (kb.digit2Key.wasPressedThisFrame) SwitchLevel(1);
+            if (kb.digit3Key.wasPressedThisFrame) SwitchLevel(2);
             if (kb.rKey.wasPressedThisFrame) ResetSession();
         }
+        if (!simulateGazeWithKeyboard && OVRInput.GetDown(OVRInput.Button.One))
+            SwitchLevel((CurrentLevel + 1) % 3); // 真机：手柄 A/X 键循环切档
 
-        bool speechEnded;
+        bool speechEnded;     // 喂状态机的"讲话刚结束"边沿
+        bool realSpeechEnd = false; // 真实 VAD 边沿（日志用；降级合成的不算）
         if (vadActive)
         {
             speechEnded = vadService.Logic.SpeechEnded;
+            realSpeechEnd = speechEnded;
             _speaking = vadService.Logic.Speaking;
+        }
+        else if (micFallback)
+        {
+            // 降级模式（设计 §4.4）：麦克风不可用 → "始终引导" + 注视累计达标直接给反馈
+            _speaking = true;
+            if (!_micFallbackLogged)
+            {
+                _micFallbackLogged = true;
+                _logger.LogEvent("MicFallback", $"gaze{settings?.micFallbackFeedbackGazeSeconds ?? 5f}s");
+                Debug.Log($"[M3] 麦克风不可用 → 降级模式（始终引导；注视满 {FallbackGazeSec}s 直接反馈）");
+            }
+            bool due = _gaze.Dwell >= FallbackGazeSec;
+            speechEnded = due && !_fallbackFired;  // 合成一次边沿
+            _fallbackFired |= due;
         }
         else
         {
@@ -142,6 +196,8 @@ public class M3DebugDriver : MonoBehaviour
             _logger.LogEvent("StateChange", $"{_prevState}->{_sm.State}");
             _prevState = _sm.State;
         }
+        // 降级模式的合成边沿按 Hidden 期为一轮（离开 Hidden 即解锁，下一轮可再触发）
+        if (_sm.State != InteractionState.Hidden) _fallbackFired = false;
 
         // ── 事件 → 音效 / IP 动画 / 日志 ──
         if (_sm.GuideTriggered)
@@ -160,7 +216,7 @@ public class M3DebugDriver : MonoBehaviour
             StartIpFeedback(snapshot);
             Debug.Log("[M3] 正反馈！IP 重现");
         }
-        if (speechEnded) _logger.LogEvent("SpeechEnd");
+        if (realSpeechEnd) _logger.LogEvent("SpeechEnd");
 
         // ── 周期采样 ──
         _sampleTimer += dt;
@@ -194,7 +250,7 @@ public class M3DebugDriver : MonoBehaviour
         {
             ipView.visible = _ipAnim != IpAnim.Hidden && _ipAlpha > 0.01f;
             ipView.x01 = _ipPos.x; ipView.y01 = _ipPos.y;
-            ipView.alpha = _ipAlpha; ipView.scale = _ipScale;
+            ipView.alpha = _ipAlpha; ipView.scale = _ipScale * (settings != null ? settings.ipSizeFactor : 1f);
             ipView.tint = _ipAnim == IpAnim.FeedbackPulse ? new Color(1f, 0.95f, 0.6f) : Color.white;
 
             // 状态栏：解释当前行为 + 反馈还差什么
@@ -217,6 +273,14 @@ public class M3DebugDriver : MonoBehaviour
             ipView.statusLine =
                 $"状态:{_sm.State} | 模拟注视:{(_simLooking ? "开" : "关")} 累计:{_gaze.Dwell:0.0}s" +
                 $" | 讲话:{speechInfo} | 目标:{(snapshot.valid ? "有效" : "无")}{hint}";
+        }
+        else if (ipWorldView != null)
+        {
+            ipWorldView.visible = _ipAnim != IpAnim.Hidden && _ipAlpha > 0.01f;
+            ipWorldView.x01 = _ipPos.x; ipWorldView.y01 = _ipPos.y;
+            if (snapshot.valid) ipWorldView.height01 = snapshot.boxHeight01;
+            ipWorldView.alpha = _ipAlpha; ipWorldView.scale = _ipScale * (settings != null ? settings.ipSizeFactor : 1f);
+            ipWorldView.tint = _ipAnim == IpAnim.FeedbackPulse ? new Color(1f, 0.95f, 0.6f) : Color.white;
         }
     }
 
@@ -315,7 +379,7 @@ public class M3DebugDriver : MonoBehaviour
     void ResetSession()
     {
         _logger?.Close();
-        _logger = new SessionLogger(Application.persistentDataPath);
+        CreateLogger();
         _logger.LogEvent("SessionStart");
         _tracker.Reset();
         _gaze.Reset();

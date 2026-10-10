@@ -30,3 +30,7 @@ MonoBehaviour:
   logSampleEverySeconds: 2
   peekIntervalSeconds: 10
   peekDurationSeconds: 0.8
+  interventionLevel: 1
+  ipSizeFactor: 1
+  cueVolumeScale: 1
+  micFallbackFeedbackGazeSeconds: 5

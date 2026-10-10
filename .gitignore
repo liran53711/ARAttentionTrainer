@@ -45,3 +45,6 @@ Assets/StreamingAssets/*.mov
 Assets/StreamingAssets/*.mkv
 
 # 注：推理模型 Assets/Models/*.sentis（约2.4MB）正常入库，不忽略
+
+# 训练会话数据（从设备拉取，含儿童测试数据，绝不入库）
+/data/
