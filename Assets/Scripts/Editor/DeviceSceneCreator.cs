@@ -180,13 +180,19 @@ public static class DeviceSceneCreator
         var envRay = rigGO.AddComponent<EnvironmentRaycastManager>();
         ipWorld.envRaycast = envRay;
 
-        // ── 10.9) C：3D 模型接口节点（2026-10-11：火柴人占位——IP_Model3D 即"建模接入点"）
-        // 组员正式模型到位后：把 IP_Model3D 换成 FBX 根节点（或直接改 model3D 引用），其余逻辑不变。
-        var modelGO = BuildStickFigureIp();
+        // ── 10.9) C：3D 模型接口节点（2026-10-12：组员正式模型 CH_Sprite 接入；缺资产回退火柴人）
+        var modelGO = BuildSpriteIp3D();
         modelGO.transform.SetParent(rigGO.transform, false);
         ipWorld.model3D = modelGO;
-        ipWorld.modelNativeHeight = 0.74f; // 火柴人实际身高 0.74m（原点=身体几何中心）；组员 FBX 按 0.35m 身高填 0.35
-        // animator 留空走 StickFigureIp 程序化姿态；组员模型（带 Animator）到位后在此赋值即可接管
+        ipWorld.modelNativeHeight = 0.3593f; // 实测身高（IpModelValidator）：0.35±0.01 内；FBX 无需改尺寸
+        ipWorld.animator = modelGO.GetComponentInChildren<Animator>(); // 动画参数（Guiding/Companion/Appear/Feedback/Peek）由 IPWorldView 驱动
+
+        // ── 10.95) 引导箭头（2026-10-12；PPT 功能：视线离开老师 → 金箭头指路拉回）──
+        var arrowGO = new GameObject("GuideArrow");
+        arrowGO.transform.SetParent(rig.centerEyeAnchor, false);
+        var arrow = arrowGO.AddComponent<GuideArrow>();
+        arrow.material = EnsureGuideArrowMaterial();
+        driver.guideArrow = arrow;
 
         // ── 11) 保存 ──
         if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
@@ -196,6 +202,31 @@ public static class DeviceSceneCreator
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log($"[ARAttention] Device 场景已生成：{ScenePath}");
+    }
+
+    /// <summary>引导箭头材质（ARAttention/GuideArrow 半透明着色器资产——被场景引用保证进包）。</summary>
+    static Material EnsureGuideArrowMaterial()
+    {
+        const string path = "Assets/Materials/GuideArrow.mat";
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (mat != null && mat.shader != null && mat.shader.name == "ARAttention/GuideArrow") return mat;
+        if (!AssetDatabase.IsValidFolder("Assets/Materials"))
+            AssetDatabase.CreateFolder("Assets", "Materials");
+        var shader = Shader.Find("ARAttention/GuideArrow");
+        if (shader == null)
+        {
+            Debug.LogError("[DeviceScene] 找不到 ARAttention/GuideArrow 着色器，回退 URP/Unlit（将丢失顶点色渐变）");
+            shader = Shader.Find("Universal Render Pipeline/Unlit");
+        }
+        if (mat == null)
+        {
+            mat = new Material(shader);
+            AssetDatabase.CreateAsset(mat, path);
+        }
+        else mat.shader = shader;
+        mat.SetColor("_Color", new Color(1f, 0.84f, 0.32f, 0.85f));
+        EditorUtility.SetDirty(mat);
+        return mat;
     }
 
     /// <summary>线框材质（做成资产并被场景引用，保证着色器进构建包不被裁剪）。</summary>
@@ -234,8 +265,69 @@ public static class DeviceSceneCreator
         return mat;
     }
 
-    /// <summary>C 项占位 3D 精灵（2026-10-11 用户定调）：火柴人——组员正式建模的"接口节点 IP_Model3D"。
-    /// 骨架/姿态由 StickFigureIp 运行时程序化搭建与平滑驱动；本方法只注入材质（资产被场景引用→着色器进包）。</summary>
+    const string SpriteFbxPath = "Assets/Art/IP/CH_Sprite.fbx";
+    const string SpriteCtrlPath = "Assets/Art/IP/CH_Sprite.controller";
+    const string SpriteMatPath = "Assets/Art/IP/Sprite_URP.mat";
+
+    /// <summary>C 项正式 3D 精灵（2026-10-12 组员交付 CH_Sprite 验收后接入）：
+    /// FBX 预置体 + Animator 控制器 + SpriteExpressionController + URP 图集材质。
+    /// 验收记录见 IpModelValidator（+Z 朝向：bakeAxisConversion=false）；缺资产时回退火柴人占位。</summary>
+    static GameObject BuildSpriteIp3D()
+    {
+        var fbx = AssetDatabase.LoadAssetAtPath<GameObject>(SpriteFbxPath);
+        if (fbx == null)
+        {
+            Debug.LogWarning("[DeviceScene] 未找到 CH_Sprite.fbx → 回退火柴人占位体");
+            return BuildStickFigureIp();
+        }
+
+        var go = (GameObject)PrefabUtility.InstantiatePrefab(fbx);
+        go.name = "IP_Model3D";
+
+        var animator = go.GetComponentInChildren<Animator>();
+        if (animator != null)
+        {
+            var ctrl = IpAnimatorBuilder.Ensure();
+            if (ctrl != null) animator.runtimeAnimatorController = ctrl;
+            animator.applyRootMotion = false; // 世界轨迹由 IPWorldView 全权负责
+        }
+        else Debug.LogWarning("[DeviceScene] CH_Sprite 无 Animator——动画不会播放");
+
+        if (go.GetComponent<SpriteExpressionController>() == null)
+            go.AddComponent<SpriteExpressionController>();
+        // 表情更醒目（用户反馈"表情变化不太清楚"）：Curious 歪头 10°→14°（序列化字段，用 SerializedObject 设置）
+        var expr = go.GetComponent<SpriteExpressionController>();
+        var so = new SerializedObject(expr);
+        var tiltProp = so.FindProperty("curiousTiltDegrees");
+        if (tiltProp != null)
+        {
+            tiltProp.floatValue = 14f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(SpriteMatPath);
+        if (mat != null)
+        {
+            foreach (var smr in go.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                smr.sharedMaterial = mat;
+        }
+        else Debug.LogWarning("[DeviceScene] 缺 Sprite_URP.mat——将沿用 FBX 自带材质（可能发粉，请先跑 IpModelValidator）");
+
+        // ★蒙皮包围盒冗余（2026-10-12 用户实测"袍子看起来透明、里面黄色" + 组员文档预警"边缘消失"）：
+        // 绑定包围盒不够大时，动画中摆动的披风/袍子会被整体剔除（消失后透出里面），
+        // 先按组员建议检查/扩大包围盒（而不是 updateWhenOffscreen 兜底）。
+        foreach (var smr in go.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+        {
+            var lb = smr.localBounds;
+            smr.localBounds = new Bounds(lb.center, lb.size * 1.8f);
+            Debug.Log($"[DeviceScene] {smr.name} 包围盒 {lb.size.ToString("F3")} → {smr.localBounds.size.ToString("F3")}（防动作裁切）");
+        }
+
+        Debug.Log("[DeviceScene] 已接入 CH_Sprite（Animator 控制器 + 表情控制器 + URP 图集材质）");
+        return go;
+    }
+
+    /// <summary>火柴人占位（无 FBX 时的回退）：骨架/姿态由 StickFigureIp 运行时程序化搭建与平滑驱动。</summary>
     static GameObject BuildStickFigureIp()
     {
         var root = new GameObject("IP_Model3D");

@@ -38,14 +38,18 @@ public class IPWorldView : MonoBehaviour
     public bool targetValid;
 
     [Header("移动平滑（First Encounters 手感）")]
-    [Tooltip("渲染位置追赶锚点的时间常数（秒）——抹平 5Hz 重锚步进")]
-    public float positionSmoothTime = 0.17f;
-    [Tooltip("最大移动速度（米/秒）——超速自动限幅（防甩飞）")]
-    public float maxSpeed = 2.5f;
-    [Tooltip("超过该距离视为瞬移（重生/跨房间重锁）：直接吸附，不做长距离飞行")]
-    public float snapDistance = 1.2f;
+    [Tooltip("渲染位置追赶锚点的时间常数（秒）——抹平 5Hz 重锚步进（2026-10-12 0.17→0.26：更缓更丝滑）")]
+    public float positionSmoothTime = 0.26f;
+    [Tooltip("最大移动速度（米/秒）——超速自动限幅（防甩飞；2026-10-12 2.5→1.7：更柔和）")]
+    public float maxSpeed = 1.7f;
+    [Tooltip("超过该距离视为瞬移（重生/跨房间重锁）：直接吸附（2026-10-12 1.2→2.0：检测抖动不易触发瞬移）")]
+    public float snapDistance = 2.0f;
     [Tooltip("朝向平滑时间（秒）")]
     public float rotationSmoothTime = 0.2f;
+    [Tooltip("飞行倾斜（bank）强度：随移动速度前倾/侧倾，增强飞行动态感")]
+    public float bankStrength = 1f;
+    [Tooltip("飞行倾斜最大角（度）")]
+    public float bankMaxDeg = 18f;
 
     [Header("空间围栏（MRUK 房间边界）")]
     [Tooltip("与人墙/边界保持的边距（米）")]
@@ -62,8 +66,8 @@ public class IPWorldView : MonoBehaviour
     [Header("参数")]
     [Tooltip("估算用的人体身高（与检测框一致）")]
     public float assumedPersonHeight = 1.7f;
-    [Tooltip("精灵基准世界尺寸（米）：略大于人脸，保证远距离也醒目（用户要求做大）")]
-    public float baseWorldSize = 0.34f;
+    [Tooltip("精灵基准世界尺寸（米）：略大于人脸，保证远距离也醒目（2026-10-12 0.34→0.46：用户反馈偏小）")]
+    public float baseWorldSize = 0.46f;
     [Tooltip("世界偏移：微调到脸侧/脸前，避免与脸完全重叠")]
     public Vector3 worldOffset = new Vector3(0f, 0f, -0.03f);
     [Tooltip("吸引模式（尚无目标框）时精灵显示的默认距离（米）")]
@@ -80,6 +84,8 @@ public class IPWorldView : MonoBehaviour
     PassthroughCameraAccess _camera;
     SpriteRenderer _renderer;
     StickFigureIp _stick;
+    SpriteExpressionController _expr;   // CH_Sprite 表情适配器（有则驱动）
+    string _exprCurrent = "";
     bool _stickChecked;
 
     /// <summary>精灵当前的世界位置（平滑后的渲染位置；语音空间定位用）。</summary>
@@ -258,7 +264,11 @@ public class IPWorldView : MonoBehaviour
         {
             if (_stick == null) model3D.SetActive(true);
             var mt = model3D.transform;
-            mt.position = _renderWorldPos;
+            // 环绕漂移（2026-10-12 用户"独立生命感"）：绕锚点的小幅慢速环绕——世界系，不随头转
+            float ot = Time.time * 0.35f;
+            Vector3 orbit = Vector3.right * (Mathf.Cos(ot) * 0.018f)
+                          + Vector3.up * (Mathf.Sin(ot * 0.8f) * 0.014f);
+            mt.position = _renderWorldPos + orbit;
 
             // 朝向：指数平滑 Slerp（吸收头姿微抖）
             Vector3 toEyeFlat = frame.cameraPose.position - _renderWorldPos;
@@ -273,8 +283,21 @@ public class IPWorldView : MonoBehaviour
                 mt.rotation = _renderRot;
             }
 
+            // 飞行倾斜（bank，2026-10-12 用户反馈"增加平滑的飞行动作"）：
+            // 随移动速度前倾/侧倾——速度来自 SmoothDamp 本身（已平滑），再叠姿态更"在飞"
+            if (bankStrength > 0.01f && _posVel.sqrMagnitude > 0.0004f)
+            {
+                Vector3 localVel = Quaternion.Inverse(_renderRot) * _posVel; // 局部系：+Z 前、+X 右
+                float bankPitch = Mathf.Clamp(-localVel.z * 9f * bankStrength, -bankMaxDeg, bankMaxDeg); // 前飞→前倾
+                float bankRoll = Mathf.Clamp(-localVel.x * 11f * bankStrength, -bankMaxDeg, bankMaxDeg); // 侧移→侧倾
+                mt.rotation = _renderRot * Quaternion.Euler(-bankPitch, 0f, bankRoll);
+            }
+            else mt.rotation = _renderRot;
+
             // 尺寸：按原生身高归一 + 出场随 alpha 柔和放大
-            float fade = Mathf.Clamp01(alpha * 1.5f);
+            // ★2026-10-12：alpha*1.5 → alpha*3——陪伴态 alpha≈0.55 时保持满尺寸，
+            //   否则 引导(1.0)→陪伴(0.55) 切换瞬间模型缩 30%（用户实测"闪现"的另一来源）
+            float fade = Mathf.Clamp01(alpha * 3f);
             float modelScale = baseWorldSize * scale / Mathf.Max(0.01f, modelNativeHeight) * fade;
             mt.localScale = Vector3.one * Mathf.Max(modelScale, 0.01f);
 
@@ -298,7 +321,9 @@ public class IPWorldView : MonoBehaviour
     {
         if (_stickChecked) return;
         _stickChecked = true;
-        if (model3D != null) _stick = model3D.GetComponentInChildren<StickFigureIp>(true);
+        if (model3D == null) return;
+        _stick = model3D.GetComponentInChildren<StickFigureIp>(true);
+        _expr = model3D.GetComponentInChildren<SpriteExpressionController>(true);
     }
 
     /// <summary>视觉状态去抖：引导↔陪伴需持续 0.18s 才切换（注视抽动不致姿势乱闪）；瞬时态（登场/反馈/探头/隐藏）放行。</summary>
@@ -318,19 +343,42 @@ public class IPWorldView : MonoBehaviour
 
     IPAnimState _prevVisual = IPAnimState.Hidden;
 
-    /// <summary>C：把动画状态翻译成 Animator 参数（参数名=需求文档动画名；仅在状态切换时触发）。</summary>
+    /// <summary>C：把动画状态翻译成 Animator 参数（CH_Sprite.controller：Guiding/Companion 布尔 + Appear/Feedback/Peek 触发）。</summary>
     void DriveAnimator(IPAnimState visual)
     {
-        if (animator == null || _prevVisual == visual) return;
+        if (_prevVisual == visual) return;
         _prevVisual = visual;
-        animator.SetBool("Flying", visual != IPAnimState.Hidden);
-        animator.SetBool("Companion", visual == IPAnimState.Companion);
+        if (animator != null)
+        {
+            animator.SetBool("Guiding", visual == IPAnimState.Guiding);
+            animator.SetBool("Companion", visual == IPAnimState.Companion);
+            switch (visual)
+            {
+                case IPAnimState.Appearing: animator.SetTrigger("Appear"); break;
+                case IPAnimState.Feedback: animator.SetTrigger("Feedback"); break;
+                case IPAnimState.Peek: animator.SetTrigger("Peek"); break;
+            }
+        }
+        DriveExpression(visual);
+    }
+
+    /// <summary>表情（模型挂 SpriteExpressionController 时）：按交付契约的 suggested_expression 映射状态。</summary>
+    void DriveExpression(IPAnimState visual)
+    {
+        if (_expr == null) return;
+        string want;
         switch (visual)
         {
-            case IPAnimState.Appearing: animator.SetTrigger("Appear"); break;
-            case IPAnimState.Feedback: animator.SetTrigger("Feedback"); break;
-            case IPAnimState.Peek: animator.SetTrigger("Peek"); break;
+            case IPAnimState.Appearing: want = "Surprised"; break;
+            case IPAnimState.Guiding:   want = "Curious"; break;   // 引导=好奇张望
+            case IPAnimState.Feedback:  want = "Encourage"; break; // 正反馈=鼓励笑
+            case IPAnimState.Peek:      want = "Curious"; break;   // 探头=好奇
+            default:                    want = "Smile"; break;     // 陪伴/待机
         }
+        if (want == _exprCurrent) return;
+        _exprCurrent = want;
+        _expr.ClearExpressions();   // 单情绪切换前先清（交付说明要求）
+        _expr.SetExpression(want, 1f);
     }
 
     /// <summary>程序生成占位精灵（64×64 紫色圆脸 + 眼睛 + 白圈），无 3D 模型时的回退。</summary>

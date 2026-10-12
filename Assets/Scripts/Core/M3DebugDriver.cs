@@ -12,6 +12,7 @@ public class M3DebugDriver : MonoBehaviour
     public ExperienceSettings settings;
     public IPDebugView ipView;          // 电脑端（OnGUI）
     public IPWorldView ipWorldView;     // 真机（世界空间）——两者二选一
+    public GuideArrow guideArrow;       // 引导箭头（PPT：视线离开老师时指路拉回）
     public AudioCuePlayer audioPlayer;
     public VoiceCuePlayer voiceCue;     // 语音指导（真机；片段缺失时静默跳过）
     public MicVadService vadService;
@@ -73,6 +74,11 @@ public class M3DebugDriver : MonoBehaviour
     // 反馈/探头"飞入"起点终点（从当前位置平滑飞过去，不瞬移）
     Vector2 _ipDest;
     bool _everShown;
+    float _arrowT;                   // 引导箭头迟滞计时（视线离开 0.6s 才出现；回归即收）
+    // 统一输出平滑（2026-10-12：消除状态切换的 alpha/scale 阶跃——用户实测"闪现"的主因之一：
+    // 日志中 alpha=1.0/scale=1.0 ↔ alpha=0.55/scale=0.85 是瞬跳，模型瞬间缩 30%）
+    float _ipAlphaSmooth, _ipScaleSmooth, _ipScaleVel;
+    bool _ipSmoothInit;
 
     float _sampleTimer;
     float _fpsSmooth = 60f;
@@ -282,13 +288,26 @@ public class M3DebugDriver : MonoBehaviour
             _peekTimer = 0f;
         }
 
+        // ── 引导箭头（PPT 功能）：引导中且孩子视线离开 → 金箭头指向老师，拉回视线 ──
+        if (guideArrow != null)
+        {
+            // 迟滞：视线离开累计 0.6s 才出现（防瞬闪）；视线回来即收（1.7 倍速回落）
+            _arrowT = Mathf.Clamp(_arrowT + ((looking || !snapshot.valid) ? -dt * 1.7f : dt), 0f, 2f);
+            bool arrowOn = _sm.State == InteractionState.Guiding && _arrowT > 0.6f;
+            guideArrow.Show(arrowOn);
+            if (snapshot.valid)
+                guideArrow.SetTarget(ipWorldView != null
+                    ? ipWorldView.CurrentWorldPos
+                    : transform.position + transform.forward * 1.5f);
+        }
+
         // ── IP 动画推进 + 喂给视图 ──
         UpdateIpAnim(dt, snapshot);
         if (ipView != null)
         {
-            ipView.visible = _ipAnim != IpAnim.Hidden && _ipAlpha > 0.01f;
+            ipView.visible = _ipAnim != IpAnim.Hidden && _ipAlphaSmooth > 0.01f;
             ipView.x01 = _ipPos.x; ipView.y01 = _ipPos.y;
-            ipView.alpha = _ipAlpha; ipView.scale = _ipScale * (settings != null ? settings.ipSizeFactor : 1f);
+            ipView.alpha = _ipAlphaSmooth; ipView.scale = _ipScaleSmooth * (settings != null ? settings.ipSizeFactor : 1f);
             ipView.tint = _ipAnim == IpAnim.FeedbackPulse ? new Color(1f, 0.95f, 0.6f) : Color.white;
 
             // 状态栏：解释当前行为 + 反馈还差什么
@@ -314,10 +333,10 @@ public class M3DebugDriver : MonoBehaviour
         }
         else if (ipWorldView != null)
         {
-            ipWorldView.visible = _ipAnim != IpAnim.Hidden && _ipAlpha > 0.01f;
+            ipWorldView.visible = _ipAnim != IpAnim.Hidden && _ipAlphaSmooth > 0.01f;
             ipWorldView.x01 = _ipPos.x; ipWorldView.y01 = _ipPos.y;
             if (snapshot.valid) ipWorldView.height01 = snapshot.boxHeight01;
-            ipWorldView.alpha = _ipAlpha; ipWorldView.scale = _ipScale * (settings != null ? settings.ipSizeFactor : 1f);
+            ipWorldView.alpha = _ipAlphaSmooth; ipWorldView.scale = _ipScaleSmooth * (settings != null ? settings.ipSizeFactor : 1f);
             ipWorldView.tint = _ipAnim == IpAnim.FeedbackPulse ? new Color(1f, 0.95f, 0.6f) : Color.white;
             ipWorldView.companionMode = _ipAnim == IpAnim.Companion; // 陪伴 → 贴真实轮廓
             ipWorldView.sideHint = _companionSide;
@@ -494,6 +513,23 @@ public class M3DebugDriver : MonoBehaviour
                 _ipAlpha = 0f;
                 break;
         }
+
+        // 精灵保持在视野舒适区（用户反馈"精灵待在视野边缘"）：不贴边、不被裁、始终看得清
+        _ipPos = new Vector2(Mathf.Clamp(_ipPos.x, 0.13f, 0.87f), Mathf.Clamp(_ipPos.y, 0.12f, 0.88f));
+
+        // ── 统一输出平滑（所有状态切变都变坡道；首次直接对齐防开场爬升）──
+        if (!_ipSmoothInit)
+        {
+            _ipSmoothInit = true;
+            _ipAlphaSmooth = _ipAlpha;
+            _ipScaleSmooth = _ipScale;
+            _ipScaleVel = 0f;
+        }
+        else
+        {
+            _ipAlphaSmooth = Mathf.MoveTowards(_ipAlphaSmooth, _ipAlpha, dt * 2.2f);
+            _ipScaleSmooth = Mathf.SmoothDamp(_ipScaleSmooth, _ipScale, ref _ipScaleVel, 0.30f, 20f, dt);
+        }
     }
 
     void ResetSession()
@@ -515,6 +551,8 @@ public class M3DebugDriver : MonoBehaviour
         _companionSideSmooth = _companionSide;
         _companionSideVel = 0f;
         _everShown = false;
+        _ipSmoothInit = false;
+        _arrowT = 0f;
         Debug.Log($"[M3] 会话已重置：{_logger.SessionDir}");
     }
 
