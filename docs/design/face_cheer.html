@@ -1,0 +1,27 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:transparent;width:512px;height:512px;overflow:hidden}</style></head><body>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="b" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
+  </defs>
+  <!-- 欢呼脸：眯眼大笑 + 腮红 + 两只举起的小手 -->
+  <!-- 小手（举高欢呼） -->
+  <g fill="#fdf6e8" stroke="#c9b4ff" stroke-width="8" stroke-linecap="round">
+    <path d="M96 250 Q74 200 96 160" fill="none"/>
+    <circle cx="94" cy="150" r="22" fill="#fdf6e8"/>
+    <path d="M416 250 Q438 200 416 160" fill="none"/>
+    <circle cx="418" cy="150" r="22" fill="#fdf6e8"/>
+  </g>
+  <!-- 脸 -->
+  <circle cx="256" cy="270" r="150" fill="#ffeeda" stroke="#e8d3b8" stroke-width="5"/>
+  <!-- 腮红 -->
+  <ellipse cx="176" cy="308" rx="30" ry="18" fill="#ffc4cf" opacity="0.85"/>
+  <ellipse cx="336" cy="308" rx="30" ry="18" fill="#ffc4cf" opacity="0.85"/>
+  <!-- 眯眼笑（^ ^） -->
+  <path d="M166 252 Q196 216 226 252" fill="none" stroke="#4a3a66" stroke-width="14" stroke-linecap="round"/>
+  <path d="M286 252 Q316 216 346 252" fill="none" stroke="#4a3a66" stroke-width="14" stroke-linecap="round"/>
+  <!-- 张口大笑（D 型） -->
+  <path d="M206 308 Q256 380 306 308 Q256 336 206 308 Z" fill="#8a4a5e"/>
+  <path d="M206 308 Q256 380 306 308" fill="none" stroke="#4a3a66" stroke-width="9" stroke-linecap="round"/>
+  <!-- 高光 -->
+  <circle cx="214" cy="196" r="16" fill="#ffffff" opacity="0.85" filter="url(#b)"/>
+</svg></body></html>

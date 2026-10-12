@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ExperienceSettings
   m_EditorClassIdentifier: ARAttention::ExperienceSettings
   detectionStride: 1
-  detectionConfThreshold: 0.35
+  detectionConfThreshold: 0.55
   requestedCameraWidth: 1280
   requestedCameraHeight: 960
   modelAsset: {fileID: 5022602860645237092, guid: f25393b552f1f874f8e491bd264a71db, type: 3}

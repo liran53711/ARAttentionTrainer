@@ -1,0 +1,14 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:transparent;width:256px;height:256px;overflow:hidden}</style></head><body>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="b" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="7"/></filter>
+    <radialGradient id="ring" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0"    stop-color="#b18cff" stop-opacity="0"/>
+      <stop offset="0.55" stop-color="#b18cff" stop-opacity="0"/>
+      <stop offset="0.78" stop-color="#e8dcff" stop-opacity="0.85"/>
+      <stop offset="0.9"  stop-color="#b18cff" stop-opacity="0.35"/>
+      <stop offset="1"    stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="256" height="256" fill="url(#ring)" filter="url(#b)"/>
+</svg></body></html>

@@ -36,12 +36,21 @@ public class IPWorldView : MonoBehaviour
     public float sideHint = 1f;
     [Tooltip("驱动推送：目标是否有效——有效=跟随锚定；丢失=冻结防漂移（设计 §4.3 脸可丢方向不丢）")]
     public bool targetValid;
+    [Tooltip("驱动推送：老师的视口坐标（最后已知；路标模式下精灵离开了老师，老师锚点单独算）")]
+    public float targetX01 = 0.5f, targetY01 = 0.5f;
+    [Tooltip("驱动推送：路标模式（引导路激活，精灵飞到孩子面前）——此模式下即使目标丢失也重构精灵锚点")]
+    public bool signpostMode;
+    [Tooltip("驱动推送：找老师动作——周期触发 Point 指向手势（引导路激活时）")]
+    public bool pointing;
+    [Tooltip("驱动推送：身体朝老师方向侧转比例（0=完全面向孩子，0.5=一半朝向老师）")]
+    public float faceTeacherBlend;
+    float _nextPoint;
 
     [Header("移动平滑（First Encounters 手感）")]
-    [Tooltip("渲染位置追赶锚点的时间常数（秒）——抹平 5Hz 重锚步进（2026-10-12 0.17→0.26：更缓更丝滑）")]
-    public float positionSmoothTime = 0.26f;
-    [Tooltip("最大移动速度（米/秒）——超速自动限幅（防甩飞；2026-10-12 2.5→1.7：更柔和）")]
-    public float maxSpeed = 1.7f;
+    [Tooltip("渲染位置追赶锚点的时间常数（秒）——抹平 5Hz 重锚步进（2026-10-12 二调 0.26→0.32）")]
+    public float positionSmoothTime = 0.32f;
+    [Tooltip("最大移动速度（米/秒）——超速自动限幅（防甩飞；2026-10-12 二调 1.7→1.2：锁定瞬间不再横飞）")]
+    public float maxSpeed = 1.2f;
     [Tooltip("超过该距离视为瞬移（重生/跨房间重锁）：直接吸附（2026-10-12 1.2→2.0：检测抖动不易触发瞬移）")]
     public float snapDistance = 2.0f;
     [Tooltip("朝向平滑时间（秒）")]
@@ -62,6 +71,8 @@ public class IPWorldView : MonoBehaviour
     [Header("模型接口（组员正式模型约定）")]
     [Tooltip("模型原生身高（米）——按 baseWorldSize/modelNativeHeight 归一缩放：FBX 按真实米制建模即可，不用在源文件里缩放")]
     public float modelNativeHeight = 1f;
+    [Tooltip("模型\"脚下\"距中心的偏移（米）——引导路的起点锚定用（≈世界身高的 35%）")]
+    public float modelFeetOffset = 0.16f;
 
     [Header("参数")]
     [Tooltip("估算用的人体身高（与检测框一致）")]
@@ -84,12 +95,49 @@ public class IPWorldView : MonoBehaviour
     PassthroughCameraAccess _camera;
     SpriteRenderer _renderer;
     StickFigureIp _stick;
+    IpEffects _fx;                      // 精灵特效系统（柔光/粒子/微动画）
     SpriteExpressionController _expr;   // CH_Sprite 表情适配器（有则驱动）
     string _exprCurrent = "";
     bool _stickChecked;
 
     /// <summary>精灵当前的世界位置（平滑后的渲染位置；语音空间定位用）。</summary>
     public Vector3 CurrentWorldPos => _hasRenderPos ? _renderWorldPos : transform.position;
+
+    /// <summary>老师相对视野的方位提示点（视口坐标）：老师可见时=其投影附近；不可见时=该方向的视野内缘。
+    /// 用于"IP 飞向老师相对方位"（2026-10-12 用户定调：立体声引导方案）。</summary>
+    public Vector2 TeacherViewportHint()
+    {
+        if (!_hasTeacherPos) return new Vector2(0.5f, 0.6f);
+        Vector3 camPos;
+        Quaternion camRot;
+        CameraFrame frame = default;
+        if (frameSource != null && frameSource.TryGetFrame(out frame) && frame.valid)
+        {
+            camPos = frame.cameraPose.position;
+            camRot = frame.cameraPose.rotation;
+        }
+        else
+        {
+            camPos = transform.position;
+            camRot = transform.rotation;
+        }
+        Vector3 dLocal = Quaternion.Inverse(camRot) * (_teacherPos - camPos);
+        var dir = new Vector2(dLocal.x, -dLocal.y); // 视口 y 向下
+        if (dir.sqrMagnitude < 1e-4f) return new Vector2(0.5f, 0.6f);
+        dir.Normalize();
+        var hint = new Vector2(0.5f + dir.x * 0.34f, 0.6f + dir.y * 0.24f);
+        return new Vector2(Mathf.Clamp(hint.x, 0.15f, 0.85f), Mathf.Clamp(hint.y, 0.2f, 0.85f));
+    }
+
+    /// <summary>驱动层转发一次性特效脉冲（Lock/Achieve/Feedback/ReGuide）。</summary>
+    public void FxPulse(string kind) => _fx?.Pulse(kind);
+
+    /// <summary>老师的世界位置（独立锚点；丢失时=最后已知方位——"人脸可丢，方向不丢"，引导路终点用）。</summary>
+    public Vector3 CurrentTeacherPos => _hasTeacherPos ? _teacherPos : CurrentWorldPos;
+
+    // 老师独立锚点：路标模式下精灵飞走了，老师的方位要单独记住
+    Vector3 _teacherPos;
+    bool _hasTeacherPos;
 
     // 锚点（离散重建）与渲染位置（连续追赶）
     bool _hasWorldPos;
@@ -181,7 +229,7 @@ public class IPWorldView : MonoBehaviour
             _invalidDuration += Time.deltaTime;
             if (_invalidDuration > 10f) _everHadValidTarget = false; // 长期无目标 → 回到吸引模式的跟随语义
         }
-        bool anchorable = targetValid || segChanged || !_everHadValidTarget;
+        bool anchorable = targetValid || signpostMode || segChanged || !_everHadValidTarget;
         bool rebuild = !_hasWorldPos || (anchorable && (versionChanged || animMoved || segChanged));
 
         if (rebuild)
@@ -225,12 +273,29 @@ public class IPWorldView : MonoBehaviour
             Vector3 right = frame.cameraPose.rotation * Vector3.right;
             Vector3 up = frame.cameraPose.rotation * Vector3.up;
             Vector3 fwd = frame.cameraPose.rotation * Vector3.forward;
-            _lastWorldPos = ray.origin + ray.direction * dist
+            Vector3 anchorNew = ray.origin + ray.direction * dist
                             + right * worldOffset.x + up * worldOffset.y + fwd * worldOffset.z;
 
             // 空间围栏：房间数据就绪时，把锚点约束在房间内（不穿墙/不插地板）
             if (mruk != null && mruk.TryGetRoomBounds(out var room))
-                _lastWorldPos = ClampToRoom(_lastWorldPos, room, roomMargin, floorMinY, ceilClearance);
+                anchorNew = ClampToRoom(anchorNew, room, roomMargin, floorMinY, ceilClearance);
+
+            // ★锚点低通滤波（2026-10-12 二调，日志实锤：锁定瞬间锚点跳 1.5-2m → "看到老师瞬间闪现"）：
+            //   5Hz 重建逐次混合，平滑检测噪声；刚重锁（丢失>0.5s）时更缓（0.18）防首帧乱跳。
+            float k = _invalidDuration > 0.5f ? 0.18f : 0.45f;
+            _lastWorldPos = _hasWorldPos ? Vector3.Lerp(_lastWorldPos, anchorNew, k) : anchorNew;
+
+            // 老师独立锚点（引导路终点）：目标有效时按老师视口坐标算；丢失时保持冻结（同样低通）
+            if (targetValid)
+            {
+                var rayT = _camera.ViewportPointToRay(new Vector2(targetX01, targetY01), frame.cameraPose);
+                Vector3 teacherNew = rayT.origin + rayT.direction * dist
+                              + right * worldOffset.x + up * worldOffset.y + fwd * worldOffset.z;
+                if (mruk != null && mruk.TryGetRoomBounds(out var roomT))
+                    teacherNew = ClampToRoom(teacherNew, roomT, roomMargin, floorMinY, ceilClearance);
+                _teacherPos = _hasTeacherPos ? Vector3.Lerp(_teacherPos, teacherNew, k) : teacherNew;
+                _hasTeacherPos = true;
+            }
 
             _hasWorldPos = true;
         }
@@ -268,14 +333,23 @@ public class IPWorldView : MonoBehaviour
             float ot = Time.time * 0.35f;
             Vector3 orbit = Vector3.right * (Mathf.Cos(ot) * 0.018f)
                           + Vector3.up * (Mathf.Sin(ot * 0.8f) * 0.014f);
-            mt.position = _renderWorldPos + orbit;
+            mt.position = _renderWorldPos + orbit + (_fx != null ? _fx.ModelMicroOffset : Vector3.zero);
 
-            // 朝向：指数平滑 Slerp（吸收头姿微抖）
+            // 朝向：指数平滑 Slerp（吸收头姿微抖）；"找老师"时按比例侧转向老师
             Vector3 toEyeFlat = frame.cameraPose.position - _renderWorldPos;
             toEyeFlat.y = 0f;
             if (toEyeFlat.sqrMagnitude > 1e-4f)
             {
                 var want = Quaternion.LookRotation(toEyeFlat.normalized, Vector3.up);
+                if (faceTeacherBlend > 0.01f && _hasTeacherPos)
+                {
+                    Vector3 toTeacherFlat = _teacherPos - _renderWorldPos;
+                    toTeacherFlat.y = 0f;
+                    if (toTeacherFlat.sqrMagnitude > 1e-4f)
+                        want = Quaternion.Slerp(want,
+                            Quaternion.LookRotation(toTeacherFlat.normalized, Vector3.up),
+                            Mathf.Clamp01(faceTeacherBlend));
+                }
                 _renderRot = _hasRenderRot && rotationSmoothTime > 0.01f
                     ? Quaternion.Slerp(_renderRot, want, Mathf.Clamp01(Time.deltaTime / rotationSmoothTime))
                     : want;
@@ -303,6 +377,13 @@ public class IPWorldView : MonoBehaviour
 
             if (_stick != null) _stick.SetVisuals(visual, alpha, tint); // 火柴人：姿态+透明度全平滑
             DriveAnimator(visual);
+
+            // "找老师"指向手势：周期触发 Point（找老师期间每次约 2.8s 一次）
+            if (animator != null && pointing && Time.time >= _nextPoint)
+            {
+                animator.SetTrigger("Point");
+                _nextPoint = Time.time + 2.8f;
+            }
         }
 
         // 诊断日志（1Hz 节流）：锚点 vs 渲染位置 vs 目标——真机排查"抖/闪"用
@@ -324,6 +405,7 @@ public class IPWorldView : MonoBehaviour
         if (model3D == null) return;
         _stick = model3D.GetComponentInChildren<StickFigureIp>(true);
         _expr = model3D.GetComponentInChildren<SpriteExpressionController>(true);
+        _fx = model3D.GetComponentInChildren<IpEffects>(true);
     }
 
     /// <summary>视觉状态去抖：引导↔陪伴需持续 0.18s 才切换（注视抽动不致姿势乱闪）；瞬时态（登场/反馈/探头/隐藏）放行。</summary>
@@ -347,7 +429,16 @@ public class IPWorldView : MonoBehaviour
     void DriveAnimator(IPAnimState visual)
     {
         if (_prevVisual == visual) return;
+        var prev = _prevVisual;
         _prevVisual = visual;
+        // 特效联动（2026-10-12）：情绪切换 + 关键节点脉冲
+        if (_fx != null)
+        {
+            _fx.SetMood(visual);
+            if (visual == IPAnimState.Appearing) _fx.Pulse("Appear");
+            if (visual == IPAnimState.Feedback) _fx.Pulse("Feedback");
+            if (visual == IPAnimState.Companion && prev == IPAnimState.Guiding) _fx.Pulse("Achieve"); // 注视达成
+        }
         if (animator != null)
         {
             animator.SetBool("Guiding", visual == IPAnimState.Guiding);

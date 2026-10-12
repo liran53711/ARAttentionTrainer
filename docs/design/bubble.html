@@ -1,0 +1,22 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:transparent;width:512px;height:512px;overflow:hidden}</style></head><body>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#f0e9ff" stop-opacity="0.92"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="10"/></filter>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2"/></filter>
+  </defs>
+  <!-- 外发光（柔紫） -->
+  <g filter="url(#glow)" opacity="0.75">
+    <rect x="96" y="76" width="320" height="260" rx="86" fill="#b18cff"/>
+    <path d="M170 330 L150 420 L240 336 Z" fill="#b18cff"/>
+  </g>
+  <!-- 泡泡主体 -->
+  <rect x="96" y="76" width="320" height="260" rx="86" fill="url(#bg)" stroke="#c9b4ff" stroke-width="7" filter="url(#soft)"/>
+  <!-- 小尾巴 -->
+  <path d="M170 320 L152 408 L238 328 Z" fill="url(#bg)" stroke="#c9b4ff" stroke-width="7" stroke-linejoin="round" filter="url(#soft)"/>
+  <!-- 高光 -->
+  <ellipse cx="176" cy="128" rx="46" ry="24" fill="#ffffff" opacity="0.85" transform="rotate(-16 176 128)"/>
+</svg></body></html>

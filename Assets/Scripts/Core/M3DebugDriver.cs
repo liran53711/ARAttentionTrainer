@@ -74,7 +74,11 @@ public class M3DebugDriver : MonoBehaviour
     // 反馈/探头"飞入"起点终点（从当前位置平滑飞过去，不瞬移）
     Vector2 _ipDest;
     bool _everShown;
-    float _arrowT;                   // 引导箭头迟滞计时（视线离开 0.6s 才出现；回归即收）
+    float _lockStableT;              // 目标持续有效累计（锁定稳定性门：≥0.8s 才认"认识老师"，防虚空锁定）
+    float _lostT;                    // 距上次目标有效的时长（"老师消失在视野后"计时）
+    bool _arrowShown;                // 引导路当前是否显示（供视图推送）
+    bool _prevArrowShown;            // 上升沿检测（方位提示出现的瞬间先喊一次）
+    float _voiceRepeatT;             // 方向性语音重复节拍（立体声再定位）
     // 统一输出平滑（2026-10-12：消除状态切换的 alpha/scale 阶跃——用户实测"闪现"的主因之一：
     // 日志中 alpha=1.0/scale=1.0 ↔ alpha=0.55/scale=0.85 是瞬跳，模型瞬间缩 30%）
     float _ipAlphaSmooth, _ipScaleSmooth, _ipScaleVel;
@@ -288,21 +292,38 @@ public class M3DebugDriver : MonoBehaviour
             _peekTimer = 0f;
         }
 
-        // ── 引导箭头（PPT 功能）：引导中且孩子视线离开 → 金箭头指向老师，拉回视线 ──
-        if (guideArrow != null)
-        {
-            // 迟滞：视线离开累计 0.6s 才出现（防瞬闪）；视线回来即收（1.7 倍速回落）
-            _arrowT = Mathf.Clamp(_arrowT + ((looking || !snapshot.valid) ? -dt * 1.7f : dt), 0f, 2f);
-            bool arrowOn = _sm.State == InteractionState.Guiding && _arrowT > 0.6f;
-            guideArrow.Show(arrowOn);
-            if (snapshot.valid)
-                guideArrow.SetTarget(ipWorldView != null
-                    ? ipWorldView.CurrentWorldPos
-                    : transform.position + transform.forward * 1.5f);
-        }
-
         // ── IP 动画推进 + 喂给视图 ──
         UpdateIpAnim(dt, snapshot);
+
+        // ── 方位提示（2026-10-12 第四版，用户定调："箭头是低效信息 → 立体声重置注意力"）──
+        //   老师消失在视野中：① IP 飞向"老师相对方位"（视野内缘的该方向位置）；
+        //   ② 从老师所在方位播放方向性语音（立体声定位，孩子自然转头找声源）；周期重复帮助再定位；
+        //   ③ IP 做"找老师"动作（指向+侧身）。箭头方案已停用（GuideArrow 保留备用）。
+        if (ipWorldView != null)
+        {
+            float lockBefore = _lockStableT;
+            _lockStableT = snapshot.valid ? _lockStableT + dt : Mathf.Max(0f, _lockStableT - dt * 0.5f);
+            if (lockBefore < 0.8f && _lockStableT >= 0.8f)
+                ipWorldView.FxPulse("Lock"); // 稳定锁定老师 → 一圈柔光"找到啦"
+            _lostT = snapshot.valid ? 0f : _lostT + dt;
+            bool hintOn = !snapshot.valid && _lostT > 0.4f && _lostT < 12f && _lockStableT >= 0.8f;
+            if (hintOn)
+            {
+                // ① IP 飞向老师相对方位（不慌不忙，缓速滑过去）
+                Vector2 hint = ipWorldView.TeacherViewportHint();
+                _ipPos = Vector2.Lerp(_ipPos, hint, Mathf.Clamp01(dt * 1.6f));
+                // ② 方向性语音从老师方位传来（立体声定位；出现时立刻喊，之后每 ~3.6s 重复）
+                if (!_prevArrowShown) _voiceRepeatT = 3.6f;
+                _voiceRepeatT -= dt;
+                if (_voiceRepeatT <= 0f)
+                {
+                    _voiceRepeatT = 3.6f;
+                    voiceCue?.Play(VoiceCue.Find, ipWorldView.CurrentTeacherPos); // 声源=老师方位
+                }
+            }
+            _prevArrowShown = hintOn;
+            _arrowShown = hintOn;
+        }
         if (ipView != null)
         {
             ipView.visible = _ipAnim != IpAnim.Hidden && _ipAlphaSmooth > 0.01f;
@@ -341,6 +362,11 @@ public class M3DebugDriver : MonoBehaviour
             ipWorldView.companionMode = _ipAnim == IpAnim.Companion; // 陪伴 → 贴真实轮廓
             ipWorldView.sideHint = _companionSide;
             ipWorldView.targetValid = snapshot.valid; // 锚定规则：有效=跟随；丢失=冻结防漂移
+            ipWorldView.targetX01 = _heldTargetPos.x; // 老师独立锚点（最后已知视口坐标；路标模式精灵飞走后老师方位单独算）
+            ipWorldView.targetY01 = _heldTargetPos.y;
+            ipWorldView.signpostMode = _arrowShown;   // 路标模式：老师消失 → IP 飞来当路标（目标丢失也重构锚点）
+            ipWorldView.pointing = _arrowShown;       // "找老师"动作：周期性指向手势 + 身体朝老师侧转
+            ipWorldView.faceTeacherBlend = _arrowShown ? 0.5f : 0f;
             ipWorldView.animState = (IPWorldView.IPAnimState)(int)_ipAnim; // C：动画状态转发（枚举顺序一一对应）
         }
     }
@@ -459,12 +485,14 @@ public class M3DebugDriver : MonoBehaviour
                 _ipScale = 0.85f + 0.05f * Mathf.Sin(Time.time * 1.7f);
                 if (_sm.State == InteractionState.Idle)
                 {
-                    // 待机期：有目标（含短暂丢失保持期）则半透明待着（不消失），彻底无目标才淡出
+                    // 待机期：有目标（含短暂丢失保持期）半透明待着；长期无目标也【不消失】——
+                    // ★2026-10-13 修复（用户实测："长时间没看到人脸，IP 自己消失了"）：
+                    // 设计原则"小精灵不允许消失"——无目标时降到 0.35 半透明守候，绝不淡出为 0。
                     bool targetAlive = snapshot.valid
                         || (_hasHeldTarget && Time.time - _heldTargetTime < 2.5f);
                     _ipAlpha = targetAlive
                         ? Mathf.MoveTowards(_ipAlpha, 0.55f, dt * 0.8f)
-                        : Mathf.MoveTowards(_ipAlpha, 0f, dt * 1.2f);
+                        : Mathf.MoveTowards(_ipAlpha, 0.35f, dt * 0.8f);
                 }
                 else
                 {
@@ -552,7 +580,10 @@ public class M3DebugDriver : MonoBehaviour
         _companionSideVel = 0f;
         _everShown = false;
         _ipSmoothInit = false;
-        _arrowT = 0f;
+        _lockStableT = 0f;
+        _lostT = 999f;
+        _arrowShown = false;
+        _prevArrowShown = false;
         Debug.Log($"[M3] 会话已重置：{_logger.SessionDir}");
     }
 

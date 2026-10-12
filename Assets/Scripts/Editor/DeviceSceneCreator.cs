@@ -39,6 +39,7 @@ public static class DeviceSceneCreator
         if (model == null)
             Fail($"没有找到 {ModelPath}（先在编辑器里等它导入完）");
         settings.modelAsset = model;
+        settings.detectionConfThreshold = 0.55f; // 2026-10-12：人偶误识别 → 提高置信度门槛
         EditorUtility.SetDirty(settings);
 
         // ── 2) 空场景：不要模板自带相机/灯光（OVRCameraRig 自带相机，双相机会双渲染）──
@@ -186,13 +187,26 @@ public static class DeviceSceneCreator
         ipWorld.model3D = modelGO;
         ipWorld.modelNativeHeight = 0.3593f; // 实测身高（IpModelValidator）：0.35±0.01 内；FBX 无需改尺寸
         ipWorld.animator = modelGO.GetComponentInChildren<Animator>(); // 动画参数（Guiding/Companion/Appear/Feedback/Peek）由 IPWorldView 驱动
+        var ipFx = modelGO.GetComponent<IpEffects>();
+        if (ipFx != null) ipFx.eye = rig.centerEyeAnchor; // 特效朝向以观察者为参照
 
-        // ── 10.95) 引导箭头（2026-10-12；PPT 功能：视线离开老师 → 金箭头指路拉回）──
-        var arrowGO = new GameObject("GuideArrow");
-        arrowGO.transform.SetParent(rig.centerEyeAnchor, false);
-        var arrow = arrowGO.AddComponent<GuideArrow>();
-        arrow.material = EnsureGuideArrowMaterial();
-        driver.guideArrow = arrow;
+        // ── 10.95) 引导"路"（2026-10-12 v3；PPT 第10页：视线离开 → 精灵当路标 + 地板箭头铺向老师）──
+        // 世界空间物体（不再是相机贴片）：贴地 + 真实透视 = 空间感
+        // 2026-10-12 用户定调："箭头是低效信息" → 改为"IP 飞向老师方位 + 方向性立体声"方案。
+        // 箭头组件与资产保留备用（EnableGuideArrow 改 true 即恢复）。
+        const bool EnableGuideArrow = false;
+        if (EnableGuideArrow)
+        {
+            var arrowGO = new GameObject("GuideArrow");
+            arrowGO.transform.SetParent(rigGO.transform, false);
+            var arrow = arrowGO.AddComponent<GuideArrow>();
+            arrow.material = EnsureGuideArrowMaterial();
+            arrow.ribbonTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Art/IP/ArrowRibbon.png");
+            arrow.eye = rig.centerEyeAnchor;
+            arrow.beaconMaterial = EnsureTexturedMat("Assets/Materials/FxGlow.mat", "Assets/Art/IP/glow_soft.png");
+            arrow.cometMaterial = EnsureTexturedMat("Assets/Materials/FxStar.mat", "Assets/Art/IP/star_soft.png");
+            driver.guideArrow = arrow;
+        }
 
         // ── 11) 保存 ──
         if (!AssetDatabase.IsValidFolder("Assets/Scenes"))
@@ -202,6 +216,26 @@ public static class DeviceSceneCreator
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         Debug.Log($"[ARAttention] Device 场景已生成：{ScenePath}");
+    }
+
+    /// <summary>柔光/柔星/柔环材质（ARAttention/GuideArrow 通用透明贴图着色器）。</summary>
+    static Material EnsureTexturedMat(string path, string texPath)
+    {
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+        var shader = Shader.Find("ARAttention/GuideArrow");
+        if (mat == null)
+        {
+            if (!AssetDatabase.IsValidFolder("Assets/Materials"))
+                AssetDatabase.CreateFolder("Assets", "Materials");
+            mat = new Material(shader);
+            AssetDatabase.CreateAsset(mat, path);
+        }
+        else if (mat.shader != shader && shader != null) mat.shader = shader;
+        var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
+        if (tex != null) mat.SetTexture("_MainTex", tex);
+        mat.SetColor("_Color", Color.white);
+        EditorUtility.SetDirty(mat);
+        return mat;
     }
 
     /// <summary>引导箭头材质（ARAttention/GuideArrow 半透明着色器资产——被场景引用保证进包）。</summary>
@@ -224,7 +258,11 @@ public static class DeviceSceneCreator
             AssetDatabase.CreateAsset(mat, path);
         }
         else mat.shader = shader;
-        mat.SetColor("_Color", new Color(1f, 0.84f, 0.32f, 0.85f));
+        mat.SetColor("_Color", Color.white); // 整体淡入淡出（运行时驱动）
+        // 设计贴图（2026-10-12 第六轮：箭头外观=设计资产）
+        var tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Art/IP/ArrowRibbon.png");
+        if (tex != null) mat.SetTexture("_MainTex", tex);
+        else Debug.LogWarning("[DeviceScene] 缺 ArrowRibbon.png——箭头将没有图案（请检查 Assets/Art/IP/）");
         EditorUtility.SetDirty(mat);
         return mat;
     }
@@ -295,6 +333,17 @@ public static class DeviceSceneCreator
 
         if (go.GetComponent<SpriteExpressionController>() == null)
             go.AddComponent<SpriteExpressionController>();
+
+        // 精灵特效系统（2026-10-12：柔光光晕/萤火虫/星尘/脉冲环/表情微动画）
+        if (go.GetComponent<IpEffects>() == null) go.AddComponent<IpEffects>();
+        var fx = go.GetComponent<IpEffects>();
+        fx.glowMat = EnsureTexturedMat("Assets/Materials/FxGlow.mat", "Assets/Art/IP/glow_soft.png");
+        fx.starMat = EnsureTexturedMat("Assets/Materials/FxStar.mat", "Assets/Art/IP/star_soft.png");
+        fx.ringMat = EnsureTexturedMat("Assets/Materials/FxRing.mat", "Assets/Art/IP/ring_soft.png");
+        fx.bubbleMat = EnsureTexturedMat("Assets/Materials/EmoteBubble.mat", "Assets/Art/IP/bubble.png");
+        fx.cheerMat = EnsureTexturedMat("Assets/Materials/EmoteCheer.mat", "Assets/Art/IP/face_cheer.png");
+        fx.humMat = EnsureTexturedMat("Assets/Materials/EmoteHum.mat", "Assets/Art/IP/face_hum.png");
+        fx.noteMat = EnsureTexturedMat("Assets/Materials/EmoteNote.mat", "Assets/Art/IP/note_sing.png");
         // 表情更醒目（用户反馈"表情变化不太清楚"）：Curious 歪头 10°→14°（序列化字段，用 SerializedObject 设置）
         var expr = go.GetComponent<SpriteExpressionController>();
         var so = new SerializedObject(expr);
@@ -308,6 +357,10 @@ public static class DeviceSceneCreator
         var mat = AssetDatabase.LoadAssetAtPath<Material>(SpriteMatPath);
         if (mat != null)
         {
+            // ★袍子/披风"内侧透明"修复（2026-10-12 用户实测第二报）：披风等是单层薄面几何，
+            // Unity 默认背面剔除 → 从内侧看直接被裁掉=像透明。改成双面渲染（URP Lit Render Face=Both）。
+            mat.SetFloat("_Cull", 0f);
+            EditorUtility.SetDirty(mat);
             foreach (var smr in go.GetComponentsInChildren<SkinnedMeshRenderer>(true))
                 smr.sharedMaterial = mat;
         }

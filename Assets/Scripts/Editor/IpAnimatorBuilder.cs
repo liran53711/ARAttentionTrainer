@@ -19,7 +19,12 @@ public static class IpAnimatorBuilder
     public static AnimatorController Ensure()
     {
         var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(Path);
-        if (existing != null) return existing;
+        if (existing != null)
+        {
+            if (existing.parameters.Any(p => p.name == "Point")) return existing;
+            AssetDatabase.DeleteAsset(Path); // 旧版本（缺 Point 参数）→ 删除重建
+            Debug.Log("[IpAnim] 检测到旧版控制器（无 Point）→ 重建");
+        }
 
         var clips = AssetDatabase.LoadAllAssetsAtPath(FbxPath).OfType<AnimationClip>()
             .Where(c => !c.name.StartsWith("__preview__")).ToArray();
@@ -36,6 +41,7 @@ public static class IpAnimatorBuilder
         ctrl.AddParameter("Appear", AnimatorControllerParameterType.Trigger);
         ctrl.AddParameter("Feedback", AnimatorControllerParameterType.Trigger);
         ctrl.AddParameter("Peek", AnimatorControllerParameterType.Trigger);
+        ctrl.AddParameter("Point", AnimatorControllerParameterType.Trigger); // "找老师"指向手势（引导路激活期间周期触发）
 
         var sm = ctrl.layers[0].stateMachine;
         var idle = State(sm, "IdleFly", Clip("IdleFly"));
@@ -44,6 +50,7 @@ public static class IpAnimatorBuilder
         var appear = State(sm, "AppearFly", Clip("AppearFly"));
         var feedback = State(sm, "HappyFeedback", Clip("HappyFeedback"));
         var peek = State(sm, "Peek", Clip("Peek"));
+        var point = State(sm, "Point", Clip("Point"));
         sm.defaultState = idle;
 
         // 基础层互切（0.18s 交叉；bool 互斥由驱动层保证）
@@ -58,9 +65,11 @@ public static class IpAnimatorBuilder
         Any(sm, appear, "Appear", 0.12f);
         Any(sm, feedback, "Feedback", 0.12f);
         Any(sm, peek, "Peek", 0.12f);
+        Any(sm, point, "Point", 0.12f);
         Back(sm, appear, idle, 0.9f, 0.15f);
         Back(sm, feedback, idle, 0.9f, 0.15f);
         Back(sm, peek, idle, 0.9f, 0.15f);
+        Back(sm, point, idle, 0.9f, 0.15f);
 
         EditorUtility.SetDirty(ctrl);
         AssetDatabase.SaveAssets();

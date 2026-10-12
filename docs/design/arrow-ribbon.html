@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:transparent;width:1024px;height:256px;overflow:hidden}
+</style>
+</head>
+<body>
+<svg width="1024" height="256" viewBox="0 0 1024 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 飘带主体：尾部透明 → 中段明亮薰衣草 → 头部饱和紫 -->
+    <linearGradient id="bodyGrad" x1="40" y1="0" x2="640" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#6a3fe0" stop-opacity="0"/>
+      <stop offset="0.16" stop-color="#7a4df0" stop-opacity="0.45"/>
+      <stop offset="0.55" stop-color="#a97fff" stop-opacity="0.95"/>
+      <stop offset="1"    stop-color="#8f5cff" stop-opacity="1"/>
+    </linearGradient>
+    <!-- 头部竖向渐变：上亮下深（果冻体积感） -->
+    <linearGradient id="headGrad" x1="0" y1="20" x2="0" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#cbb2ff"/>
+      <stop offset="0.42" stop-color="#9a6bff"/>
+      <stop offset="1"    stop-color="#6a3fe0"/>
+    </linearGradient>
+    <!-- 竖向体积光影（叠加在飘带上） -->
+    <linearGradient id="volumeGrad" x1="0" y1="88" x2="0" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0"   stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="0.35" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="0.75" stop-color="#3d1a99" stop-opacity="0.10"/>
+      <stop offset="1"   stop-color="#3d1a99" stop-opacity="0.28"/>
+    </linearGradient>
+    <filter id="glowBig"  x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="16"/></filter>
+    <filter id="glowSoft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="4"/></filter>
+    <filter id="glowTiny" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.4"/></filter>
+    <!-- 四角星（魔法闪光） -->
+    <path id="spark" d="M0,-12 L2.6,-2.6 L12,0 L2.6,2.6 L0,12 L-2.6,2.6 L-12,0 L-2.6,-2.6 Z"/>
+  </defs>
+
+  <!-- ============ 1) 外圈大面积柔光 aura ============ -->
+  <g filter="url(#glowBig)" opacity="0.6">
+    <path d="M 40 116 C 210 102 400 152 618 116 L 618 140 C 400 176 210 126 40 140 Z"
+          fill="#8b5cf6" opacity="0.75"/>
+    <path d="M 648 44 L 852 128 L 648 212" fill="none" stroke="#8b5cf6" stroke-width="72"
+          stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  </g>
+
+  <!-- ============ 2) 飘带主体（果冻质感三层） ============ -->
+  <!-- 2a 填充 -->
+  <path id="ribbon" d="M 40 112 C 210 98 400 148 618 112 L 618 148 C 400 184 210 130 40 148 Z"
+        fill="url(#bodyGrad)"/>
+  <!-- 2b 竖向体积光影 -->
+  <path d="M 40 112 C 210 98 400 148 618 112 L 618 148 C 400 184 210 130 40 148 Z"
+        fill="url(#volumeGrad)"/>
+  <!-- 2c 白色亮描边 -->
+  <path d="M 40 112 C 210 98 400 148 618 112 L 618 148 C 400 184 210 130 40 148 Z"
+        fill="none" stroke="#ffffff" stroke-opacity="0.95" stroke-width="2.6" filter="url(#glowTiny)"/>
+  <!-- 2d 中脊高光 -->
+  <path d="M 56 127 C 210 110 400 158 610 128"
+        fill="none" stroke="#efe6ff" stroke-width="5" stroke-linecap="round"
+        opacity="0.75" filter="url(#glowSoft)"/>
+
+  <!-- ============ 3) V 形箭头（粗笔画分层 = 糖果管） ============ -->
+  <!-- 3a 白亮描边层 -->
+  <path d="M 652 48 L 850 128 L 652 208" fill="none" stroke="#ffffff" stroke-opacity="0.95"
+        stroke-width="60" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowTiny)"/>
+  <!-- 3b 主体层 -->
+  <path d="M 652 48 L 850 128 L 652 208" fill="none" stroke="url(#headGrad)"
+        stroke-width="50" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 3c 内芯高光层 -->
+  <path d="M 658 60 L 838 128 L 658 196" fill="none" stroke="#e4d8ff" stroke-opacity="0.85"
+        stroke-width="12" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowSoft)"/>
+
+  <!-- ============ 4) 星光小路（沿途小星星） ============ -->
+  <defs>
+    <radialGradient id="starHalo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0"   stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="0.4" stop-color="#c9aaff" stop-opacity="0.5"/>
+      <stop offset="1"   stop-color="#8b5cf6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g>
+    <circle cx="200" cy="123" r="24" fill="url(#starHalo)"/>
+    <circle cx="330" cy="154" r="30" fill="url(#starHalo)"/>
+    <circle cx="462" cy="121" r="22" fill="url(#starHalo)"/>
+    <circle cx="560" cy="158" r="30" fill="url(#starHalo)"/>
+  </g>
+  <g filter="url(#glowTiny)">
+    <path d="M200,106 L203.4,119.6 L217,123 L203.4,126.4 L200,140 L196.6,126.4 L183,123 L196.6,119.6 Z" fill="#ffffff" opacity="0.95"/>
+    <path d="M330,130 L335.2,148.8 L354,154 L335.2,159.2 L330,178 L324.8,159.2 L306,154 L324.8,148.8 Z" fill="#ffffff" opacity="1"/>
+    <path d="M462,104 L465.6,117.4 L479,121 L465.6,124.6 L462,138 L458.4,124.6 L445,121 L458.4,117.4 Z" fill="#ffffff" opacity="0.9"/>
+    <path d="M560,132 L565.2,150.8 L584,156 L565.2,161.2 L560,180 L554.8,161.2 L536,156 L554.8,150.8 Z" fill="#ffffff" opacity="1"/>
+  </g>
+  <!-- 头顶大星（主角星） -->
+  <path d="M886,72 L894.4,103.6 L926,112 L894.4,120.4 L886,152 L877.6,120.4 L846,112 L877.6,103.6 Z" fill="#f3e8ff" opacity="0.5" filter="url(#glowSoft)"/>
+  <path d="M886,78 L893,104.6 L919.4,112 L893,119.4 L886,146 L879,119.4 L852.6,112 L879,104.6 Z" fill="#ffffff" opacity="0.95"/>
+</svg>
+</body>
+</html>

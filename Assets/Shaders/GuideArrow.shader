@@ -7,11 +7,14 @@ Shader "ARAttention/GuideArrow"
 {
     Properties
     {
-        _Color ("整体颜色（含整体透明度）", Color) = (1, 0.84, 0.32, 0.85)
+        _Color ("整体颜色（含整体透明度）", Color) = (1, 1, 1, 1)
+        _MainTex ("设计贴图（ArrowRibbon）", 2D) = "white" {}
     }
     SubShader
     {
         Tags { "Queue"="Transparent+50" "RenderType"="Transparent" "IgnoreProjector"="True" }
+        // 标准透明混合（缺失会导致 alpha 全被忽略——2026-10-12 踩过：所有层实心绘制"糊成一片"）
+        Blend SrcAlpha OneMinusSrcAlpha
         Cull Off
         ZWrite Off
 
@@ -23,16 +26,20 @@ Shader "ARAttention/GuideArrow"
             #include "UnityCG.cginc"
 
             fixed4 _Color;
+            sampler2D _MainTex;
+            float4 _MainTex_ST;
 
             struct appdata
             {
                 float4 vertex : POSITION;
                 fixed4 color  : COLOR;
+                float2 uv     : TEXCOORD0;
             };
             struct v2f
             {
                 float4 pos   : SV_POSITION;
                 fixed4 color : COLOR;
+                float2 uv    : TEXCOORD0;
             };
 
             v2f vert(appdata v)
@@ -40,12 +47,15 @@ Shader "ARAttention/GuideArrow"
                 v2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.color = v.color;
+                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
                 return o;
             }
 
             fixed4 frag(v2f i) : SV_Target
             {
-                return fixed4(_Color.rgb, _Color.a * i.color.a);
+                // 贴图（sRGB 由采样硬件自动转 Linear）× 整体染色/淡出 × 顶点 alpha（头淡入）
+                fixed4 t = tex2D(_MainTex, i.uv);
+                return fixed4(_Color.rgb * t.rgb * i.color.rgb, _Color.a * t.a * i.color.a);
             }
             ENDHLSL
         }
