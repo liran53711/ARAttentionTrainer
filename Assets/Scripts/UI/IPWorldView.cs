@@ -129,8 +129,33 @@ public class IPWorldView : MonoBehaviour
         return new Vector2(Mathf.Clamp(hint.x, 0.15f, 0.85f), Mathf.Clamp(hint.y, 0.2f, 0.85f));
     }
 
-    /// <summary>驱动层转发一次性特效脉冲（Lock/Achieve/Feedback/ReGuide）。</summary>
+    /// <summary>驱动层转发一次性特效脉冲（Lock/Achieve/Feedback/ReGuide/Celebrate）。</summary>
     public void FxPulse(string kind) => _fx?.Pulse(kind);
+
+    // ── 跳舞庆典（2026-10-13 用户定调：人脸居中保持 20s → 精灵跳舞奖励）──
+    float _celebrateStart = -999f, _celebrateUntil = -999f, _nextCelebFx;
+    /// <summary>庆典是否进行中（驱动层/测试探针用）。</summary>
+    public bool IsCelebrating => Time.time < _celebrateUntil;
+
+    /// <summary>触发跳舞庆典：立即进入"开心"情绪 + 欢呼泡泡 + 金色星光，持续 duration 秒。</summary>
+    public void Celebrate(float duration)
+    {
+        _celebrateStart = Time.time;
+        _celebrateUntil = Time.time + duration;
+        _nextCelebFx = Time.time + 0.45f; // 开场大脉冲后 0.45s 再开始节拍
+        EnsureStick();                    // 非 LateUpdate 时机调用时保证 _fx/_expr 就绪
+        if (_fx != null)
+        {
+            _fx.SetMood(IPAnimState.Feedback); // 开心弹跳 + 亮光晕
+            _fx.Pulse("Celebrate");            // 大爆发：金色星尘 + 欢呼泡泡
+        }
+        if (animator != null) animator.SetTrigger("Feedback"); // 开心/庆祝动作
+        if (_expr != null)
+        {
+            _expr.ClearExpressions();
+            _expr.SetExpression("Encourage", 1f);
+        }
+    }
 
     /// <summary>老师的世界位置（独立锚点；丢失时=最后已知方位——"人脸可丢，方向不丢"，引导路终点用）。</summary>
     public Vector3 CurrentTeacherPos => _hasTeacherPos ? _teacherPos : CurrentWorldPos;
@@ -333,7 +358,21 @@ public class IPWorldView : MonoBehaviour
             float ot = Time.time * 0.35f;
             Vector3 orbit = Vector3.right * (Mathf.Cos(ot) * 0.018f)
                           + Vector3.up * (Mathf.Sin(ot * 0.8f) * 0.014f);
-            mt.position = _renderWorldPos + orbit + (_fx != null ? _fx.ModelMicroOffset : Vector3.zero);
+            // 跳舞庆典叠加（2026-10-13）：蹦跳 + 旋转两圈 + 伸缩脉冲 + 星光节拍
+            Vector3 dance = Vector3.zero;
+            float danceScale = 1f;
+            if (IsCelebrating)
+            {
+                float ct = Time.time - _celebrateStart;
+                float danceFade = Mathf.Clamp01((_celebrateUntil - Time.time) / 0.6f); // 收势柔和淡出
+                dance = Vector3.up * (Mathf.Abs(Mathf.Sin(ct * 6.5f)) * 0.07f * danceFade); // 蹦跳
+                if (_fx != null && Time.time >= _nextCelebFx)
+                {
+                    _nextCelebFx = Time.time + 0.7f;
+                    _fx.Pulse("Celebrate"); // 周期金色星光（大爆发在 Celebrate() 开场已放）
+                }
+            }
+            mt.position = _renderWorldPos + orbit + dance + (_fx != null ? _fx.ModelMicroOffset : Vector3.zero);
 
             // 朝向：指数平滑 Slerp（吸收头姿微抖）；"找老师"时按比例侧转向老师
             Vector3 toEyeFlat = frame.cameraPose.position - _renderWorldPos;
@@ -368,11 +407,21 @@ public class IPWorldView : MonoBehaviour
             }
             else mt.rotation = _renderRot;
 
+            if (IsCelebrating)
+            {
+                float ct = Time.time - _celebrateStart;
+                float spinFade = Mathf.Clamp01((_celebrateUntil - Time.time) / 0.6f);
+                // 前 2.6s 原地跳转两整圈（720°≡0°，结束不回跳）；后段蹦跳继续
+                float spin = Mathf.Min(ct / 2.6f, 1f) * 2f * 360f;
+                mt.rotation = Quaternion.AngleAxis(spin, Vector3.up) * mt.rotation;
+                danceScale = 1f + 0.07f * Mathf.Sin(ct * 9f) * spinFade; // 伸缩脉冲（像开心晃）
+            }
+
             // 尺寸：按原生身高归一 + 出场随 alpha 柔和放大
             // ★2026-10-12：alpha*1.5 → alpha*3——陪伴态 alpha≈0.55 时保持满尺寸，
             //   否则 引导(1.0)→陪伴(0.55) 切换瞬间模型缩 30%（用户实测"闪现"的另一来源）
             float fade = Mathf.Clamp01(alpha * 3f);
-            float modelScale = baseWorldSize * scale / Mathf.Max(0.01f, modelNativeHeight) * fade;
+            float modelScale = baseWorldSize * scale / Mathf.Max(0.01f, modelNativeHeight) * fade * danceScale;
             mt.localScale = Vector3.one * Mathf.Max(modelScale, 0.01f);
 
             if (_stick != null) _stick.SetVisuals(visual, alpha, tint); // 火柴人：姿态+透明度全平滑

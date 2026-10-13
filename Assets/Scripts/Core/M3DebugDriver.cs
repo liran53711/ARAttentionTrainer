@@ -9,6 +9,7 @@ public class M3DebugDriver : MonoBehaviour
 {
     [Header("引用")]
     public FaceDetector detector;
+    public FaceBoxRunner faceRunner;   // BlazeFace 人脸检测（人脸居中奖励；可为空=功能关闭）
     public ExperienceSettings settings;
     public IPDebugView ipView;          // 电脑端（OnGUI）
     public IPWorldView ipWorldView;     // 真机（世界空间）——两者二选一
@@ -91,8 +92,21 @@ public class M3DebugDriver : MonoBehaviour
     public float IpAlphaProbe => _ipAlphaSmooth;
     public int IpAnimProbe => (int)_ipAnim;
     public float NowProbe => _now;
+    public float FaceHoldProbe => _faceHold;
+    public bool FaceCelebrateProbe => _celebrating;
     public event System.Action<string, string> OnSignal;
     void Signal(string kind, string detail) => OnSignal?.Invoke(kind, detail);
+
+    // ── 人脸居中保持奖励（2026-10-13 用户定调：老师人脸位于视野中心保持 20s → 精灵跳舞）──
+    float _faceHold;                 // 当前"人脸居中"累计秒数（中断快速衰减）
+    float _faceDataT = -99f;         // 上次拿到新人脸检测批次的时刻（新鲜度判定）
+    int _faceSeenVer = -1;           // 已见过的人脸检测版本号
+    float _faceCenteredDist = 99f;   // 当前主脸中心到视野中心的距离（探针/日志用）
+    int _faceMilestone;              // 已发放的里程碑数（5/10/15s 节拍）
+    bool _celebrating;               // 庆典进行中（探针）
+    float _celebrateUntil;           // 庆典结束时刻
+    float _celebrateCooldownUntil;   // 庆典后冷却截止时刻
+    List<DetectionResult> _simFaces; // 模拟人脸框（测试机注入）
     // 统一输出平滑（2026-10-12：消除状态切换的 alpha/scale 阶跃——用户实测"闪现"的主因之一：
     // 日志中 alpha=1.0/scale=1.0 ↔ alpha=0.55/scale=0.85 是瞬跳，模型瞬间缩 30%）
     float _ipAlphaSmooth, _ipScaleSmooth, _ipScaleVel;
@@ -167,7 +181,7 @@ public class M3DebugDriver : MonoBehaviour
         List<DetectionResult> simDetections = null;
         if (simMode)
         {
-            sim.Tick(dt, out simDetections, out simLooking, out simSpeaking, out simSpeechEnded, out simReset);
+            sim.Tick(dt, out simDetections, out _simFaces, out simLooking, out simSpeaking, out simSpeechEnded, out simReset);
             if (simReset) ResetSession();
         }
         else
@@ -396,6 +410,102 @@ public class M3DebugDriver : MonoBehaviour
             _prevArrowShown = hintOn;
             _arrowShown = hintOn;
         }
+
+        // ── 人脸居中保持奖励（2026-10-13 用户定调）──
+        //   触发条件：精准人脸检测（BlazeFace）→ 人脸中心位于视野中心附近 → 累计保持 20s（可调）
+        //   反馈：每 5s 里程碑小星光；达标 → 跳舞庆典（旋转+蹦跳+金色星光+欢呼泡泡+语音）
+        {
+            float celebrateSec = settings != null ? settings.faceCelebrateSeconds : 20f;
+            float radius = settings != null ? settings.faceCenterRadius : 0.22f;
+            float hyst = settings != null ? settings.faceCenterHysteresis : 1.3f;
+            float decay = settings != null ? settings.faceHoldDecayRate : 3f;
+            float step = settings != null ? settings.faceMilestoneStepSeconds : 5f;
+
+            // 数据源 + 新鲜度：模拟（测试机）或 FaceBoxRunner；超过新鲜度窗口视为没看（不累计）
+            int ver = simMode
+                ? Mathf.FloorToInt(_now * 30f)                            // 模拟：每 tick 视作批新数据
+                : (faceRunner != null ? faceRunner.Version : -1);
+            if (ver != _faceSeenVer) { _faceSeenVer = ver; _faceDataT = _now; }
+            float freshWin = settings != null ? settings.faceFreshnessSeconds : 0.8f;
+            bool freshFaces = _now - _faceDataT < freshWin;
+            var faces = simMode ? _simFaces : (faceRunner != null ? faceRunner.LatestFaces : null);
+
+            // 选"最可信的中央脸"：框宽达标 → 取中心离视野中心最近者（= 孩子正在注视的那张脸）
+            bool hasCandidate = false, centered = false, farOut = true;
+            if (freshFaces && faces != null && faces.Count > 0)
+            {
+                float minW = settings != null ? settings.faceMinBoxWidth : 0.04f;
+                float bestD = float.MaxValue;
+                for (int i = 0; i < faces.Count; i++)
+                {
+                    var b = faces[i].normalizedBox;
+                    if (b.width < minW) continue;
+                    float dx = b.x + b.width * 0.5f - 0.5f;
+                    float dy = b.y + b.height * 0.5f - 0.5f;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (d < bestD) { bestD = d; hasCandidate = true; }
+                }
+                if (hasCandidate)
+                {
+                    _faceCenteredDist = bestD;
+                    centered = bestD <= radius;
+                    farOut = bestD > radius * hyst;   // 滞回：入宽出窄，防边界抖动
+                }
+            }
+            if (!hasCandidate) _faceCenteredDist = 99f;
+
+            // 保持计时：居中 → 累计；超滞回带 → 快速衰减；中间带 → 不动（滞回）
+            if (_celebrating)
+            {
+                if (_now >= _celebrateUntil)
+                {
+                    _celebrating = false;
+                    _faceHold = 0f;
+                    _faceMilestone = 0;
+                    _celebrateCooldownUntil = _now + (settings != null ? settings.faceCelebrateCooldownSeconds : 8f);
+                    Debug.Log("[M3] 跳舞庆典结束（冷却后重新累计）");
+                }
+            }
+            else if (_now < _celebrateCooldownUntil)
+            {
+                // 冷却期：不累计（防连发）
+            }
+            else if (centered)
+            {
+                _faceHold += dt;
+
+                // 里程碑：每满 5s 星光脉冲（在庆典阈值之前的节拍）
+                int ms = Mathf.FloorToInt(_faceHold / Mathf.Max(1f, step));
+                if (ms > _faceMilestone && _faceHold < celebrateSec)
+                {
+                    _faceMilestone = ms;
+                    Signal("Face", $"Hold{ms * Mathf.RoundToInt(step)}");
+                    ipWorldView?.FxPulse("Achieve");
+                    _logger.LogEvent("FaceHold", $"{ms * step:0}s");
+                }
+
+                // 达标 → 跳舞庆典！
+                if (_faceHold >= celebrateSec)
+                {
+                    _celebrating = true;
+                    float dur = settings != null ? settings.faceCelebrateDuration : 6f;
+                    _celebrateUntil = _now + dur;
+                    Signal("Face", "Celebrate");
+                    _logger.LogEvent("FaceCelebrate", $"{celebrateSec:0}s 保持达标");
+                    if (_ipAnim == IpAnim.Hidden) StartIpAppear(); // 精灵绝不缺席庆典
+                    ipWorldView?.Celebrate(dur);
+                    audioPlayer?.PlayCue(AudioCue.Celebrate);
+                    voiceCue?.Play(VoiceCue.Celebrate, IpVoicePos());
+                    Debug.Log($"[M3] 🎉 人脸居中保持 {celebrateSec:0}s 达标 → 精灵跳舞庆典！");
+                }
+            }
+            else if (farOut)
+            {
+                _faceHold = Mathf.Max(0f, _faceHold - dt * decay);
+                if (_faceHold <= 0.001f) _faceMilestone = 0; // 完全清零 → 里程碑重置
+            }
+            // 中间带（有候选脸但不在滞回内外）：计时保持不动
+        }
         if (ipView != null)
         {
             ipView.visible = _ipAnim != IpAnim.Hidden && _ipAlphaSmooth > 0.01f;
@@ -426,10 +536,11 @@ public class M3DebugDriver : MonoBehaviour
         }
         else if (ipWorldView != null)
         {
-            ipWorldView.visible = _ipAnim != IpAnim.Hidden && _ipAlphaSmooth > 0.01f;
+            ipWorldView.visible = _celebrating || (_ipAnim != IpAnim.Hidden && _ipAlphaSmooth > 0.01f);
             ipWorldView.x01 = _ipPos.x; ipWorldView.y01 = _ipPos.y;
             if (snapshot.valid) ipWorldView.height01 = snapshot.boxHeight01;
-            ipWorldView.alpha = _ipAlphaSmooth; ipWorldView.scale = _ipScaleSmooth * (settings != null ? settings.ipSizeFactor : 1f);
+            ipWorldView.alpha = _celebrating ? 1f : _ipAlphaSmooth; // 庆典全亮
+            ipWorldView.scale = _ipScaleSmooth * (settings != null ? settings.ipSizeFactor : 1f);
             ipWorldView.tint = _ipAnim == IpAnim.FeedbackPulse ? new Color(1f, 0.95f, 0.6f) : Color.white;
             ipWorldView.companionMode = _ipAnim == IpAnim.Companion; // 陪伴 → 贴真实轮廓
             ipWorldView.sideHint = _companionSide;
@@ -555,7 +666,11 @@ public class M3DebugDriver : MonoBehaviour
                     _companionSideSmooth * 0.115f,
                     -0.035f + Mathf.Sin(_now * 1.35f) * 0.009f);
                 _ipScale = 0.85f + 0.05f * Mathf.Sin(_now * 1.7f);
-                if (_sm.State == InteractionState.Idle)
+                if (_celebrating)
+                {
+                    _ipAlpha = 1f; // 庆典期间全亮——奖励必须看得见（2026-10-13）
+                }
+                else if (_sm.State == InteractionState.Idle)
                 {
                     // 待机期：有目标（含短暂丢失保持期）半透明待着；长期无目标也【不消失】——
                     // ★2026-10-13 修复（用户实测："长时间没看到人脸，IP 自己消失了"）：
@@ -659,6 +774,13 @@ public class M3DebugDriver : MonoBehaviour
         _lostT = 999f;
         _arrowShown = false;
         _prevArrowShown = false;
+        _faceHold = 0f;
+        _faceMilestone = 0;
+        _celebrating = false;
+        _celebrateCooldownUntil = 0f;
+        _faceSeenVer = -1;
+        _faceDataT = -99f;
+        _simFaces = null;
         Debug.Log($"[M3] 会话已重置：{_logger.SessionDir}");
     }
 

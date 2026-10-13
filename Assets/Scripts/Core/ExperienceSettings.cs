@@ -81,6 +81,44 @@ public class ExperienceSettings : ScriptableObject
              "持续到首次检测到目标或超过此时长（秒）。0=关闭")]
     public float startupAttractionSeconds = 25f;
 
+    [Header("人脸居中奖励（2026-10-13 用户定调：精准人脸检测→居中保持→跳舞庆典）")]
+    [Tooltip("BlazeFace 人脸检测模型（Assets/Models/blazeface_face.onnx）")]
+    public ModelAsset faceModelAsset;
+
+    [Tooltip("人脸检测节流间隔（秒）")]
+    public float faceDetectionInterval = 0.33f;
+
+    [Range(0f, 1f)]
+    [Tooltip("人脸置信度阈值（低于此值的检测框丢弃）")]
+    public float faceConfThreshold = 0.6f;
+
+    [Tooltip("人脸框最小宽度（归一化）——过滤远处的误检小框")]
+    public float faceMinBoxWidth = 0.04f;
+
+    [Tooltip("人脸中心距视野中心多近算'居中'（视口半径）")]
+    public float faceCenterRadius = 0.22f;
+
+    [Tooltip("居中滞回带：超出 radius×该系数才开始衰减（防边界处计时抖动）")]
+    public float faceCenterHysteresis = 1.3f;
+
+    [Tooltip("人脸数据新鲜度：超过这个时间没有新检测结果 → 视为没在看（不累计）")]
+    public float faceFreshnessSeconds = 0.8f;
+
+    [Tooltip("对脸注视保持达标秒数 → 精灵跳舞庆典（先暂定 20s，后续通过对话判决调整）")]
+    public float faceCelebrateSeconds = 20f;
+
+    [Tooltip("保持中断时的衰减速率（3=每秒掉 3 秒，快速清零）")]
+    public float faceHoldDecayRate = 3f;
+
+    [Tooltip("跳舞庆典动画时长（秒）")]
+    public float faceCelebrateDuration = 6f;
+
+    [Tooltip("庆典后冷却（秒）：这段时间不重新累计（防连发）")]
+    public float faceCelebrateCooldownSeconds = 8f;
+
+    [Tooltip("里程碑节拍（秒）：保持中每满 5s 给一次小反馈（星光脉冲）")]
+    public float faceMilestoneStepSeconds = 5f;
+
     public static readonly string[] LevelNames = { "强", "中", "弱" };
     public string CurrentLevelName => LevelNames[Mathf.Clamp(interventionLevel, 0, 2)];
 

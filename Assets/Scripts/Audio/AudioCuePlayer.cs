@@ -3,7 +3,7 @@
 // 真机阶段 spatialBlend 设 1 → 由 Quest 空间音频渲染在 3D 位置；电脑调试设 0。
 using UnityEngine;
 
-public enum AudioCue { GuideAppear, Hide, Feedback }
+public enum AudioCue { GuideAppear, Hide, Feedback, Celebrate }
 
 public class AudioCuePlayer : MonoBehaviour
 {
@@ -13,7 +13,7 @@ public class AudioCuePlayer : MonoBehaviour
     [Range(0f, 1f)] public float spatialBlend = 0f;
 
     AudioSource _source;
-    AudioClip _guide, _hide, _feedback;
+    AudioClip _guide, _hide, _feedback, _celebrate;
 
     void Awake()
     {
@@ -26,6 +26,8 @@ public class AudioCuePlayer : MonoBehaviour
         _guide = BuildTone("cue_guide", new[] { (520f, 0.12f), (780f, 0.16f) });          // 上行双音：出现
         _hide = BuildTone("cue_hide", new[] { (660f, 0.12f), (440f, 0.20f) });            // 下行软音：隐藏
         _feedback = BuildTone("cue_feedback", new[] { (523f, 0.10f), (659f, 0.10f), (784f, 0.18f) }); // C-E-G 琶音：正向反馈
+        _celebrate = BuildTone("cue_celebrate", new[]                                           // 庆典小号角：C-E-G-C↑-E↑-C↑
+            { (523f, 0.09f), (659f, 0.09f), (784f, 0.09f), (1047f, 0.20f), (1319f, 0.10f), (1047f, 0.38f) });
     }
 
     public void PlayCue(AudioCue cue)
@@ -34,6 +36,7 @@ public class AudioCuePlayer : MonoBehaviour
         {
             AudioCue.GuideAppear => _guide,
             AudioCue.Hide => _hide,
+            AudioCue.Celebrate => _celebrate != null ? _celebrate : _feedback,
             _ => _feedback,
         };
         if (clip != null) _source.PlayOneShot(clip);

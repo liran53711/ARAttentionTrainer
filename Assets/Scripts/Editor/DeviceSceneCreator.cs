@@ -40,6 +40,10 @@ public static class DeviceSceneCreator
             Fail($"没有找到 {ModelPath}（先在编辑器里等它导入完）");
         settings.modelAsset = model;
         settings.detectionConfThreshold = 0.55f; // 2026-10-12：人偶误识别 → 提高置信度门槛
+        // 人脸检测模型（BlazeFace, 2026-10-13）：人脸居中保持奖励（20s → 跳舞庆典）
+        settings.faceModelAsset = AssetDatabase.LoadAssetAtPath<ModelAsset>("Assets/Models/blazeface_face.onnx");
+        if (settings.faceModelAsset == null)
+            Debug.LogWarning("[DeviceScene] 未找到 blazeface_face.onnx（人脸居中奖励暂不可用）");
         EditorUtility.SetDirty(settings);
 
         // ── 2) 空场景：不要模板自带相机/灯光（OVRCameraRig 自带相机，双相机会双渲染）──
@@ -154,6 +158,12 @@ public static class DeviceSceneCreator
         if (seg.modelAsset == null)
             Debug.LogWarning("[DeviceScene] 未找到 selfie_seg_landscape.onnx（轮廓贴合暂不可用）");
         ipWorld.seg = seg;
+
+        // ── 10.65) 人脸检测（BlazeFace）：人脸居中保持奖励（2026-10-13 用户定调 20s→跳舞庆典）
+        var face = camGO.AddComponent<FaceBoxRunner>();
+        face.frameSource = source;
+        face.settings = settings;
+        driver.faceRunner = face;
 
         // ── 10.7) A：人物遮挡（屏幕空间擦除）——2026-10-11 用户定调："遮挡难做就不要了"
         // 默认关闭：Scene 里不再生成 MaskOccluder（MaskOccluder.cs / MaskErase.shader 保留，

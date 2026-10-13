@@ -5,7 +5,7 @@
 // 片段缺失时静默跳过（由 AudioCuePlayer 的音效兜底）。
 using UnityEngine;
 
-public enum VoiceCue { GuideAppear, Find, Feedback, Peek }
+public enum VoiceCue { GuideAppear, Find, Feedback, Peek, Celebrate }
 
 public class VoiceCuePlayer : MonoBehaviour
 {
@@ -14,7 +14,7 @@ public class VoiceCuePlayer : MonoBehaviour
     [Range(0f, 1f)] public float spatialBlend = 0.6f;
 
     AudioSource _source;
-    AudioClip _guide, _find, _feedback, _peek;
+    AudioClip _guide, _find, _feedback, _peek, _celebrate;
 
     void Awake()
     {
@@ -28,10 +28,12 @@ public class VoiceCuePlayer : MonoBehaviour
         _find = Resources.Load<AudioClip>("Voice/voice_find");
         _feedback = Resources.Load<AudioClip>("Voice/voice_feedback");
         _peek = Resources.Load<AudioClip>("Voice/voice_peek");
+        _celebrate = Resources.Load<AudioClip>("Voice/voice_celebrate");
 
         int n = (_guide != null ? 1 : 0) + (_find != null ? 1 : 0)
-              + (_feedback != null ? 1 : 0) + (_peek != null ? 1 : 0);
-        Debug.Log($"[Voice] 语音片段加载 {n}/4" + (n < 4 ? "（缺失的将只有音效）" : ""));
+              + (_feedback != null ? 1 : 0) + (_peek != null ? 1 : 0)
+              + (_celebrate != null ? 1 : 0);
+        Debug.Log($"[Voice] 语音片段加载 {n}/5" + (n < 5 ? "（缺失的将只有音效）" : ""));
     }
 
     /// <summary>运行时调整音量（干预档位联动）。</summary>
@@ -49,6 +51,7 @@ public class VoiceCuePlayer : MonoBehaviour
             VoiceCue.GuideAppear => _guide,
             VoiceCue.Find => _find,
             VoiceCue.Feedback => _feedback,
+            VoiceCue.Celebrate => _celebrate != null ? _celebrate : _feedback, // 庆典语音缺失时用反馈语音兜底
             _ => _peek,
         };
         if (clip == null) return;

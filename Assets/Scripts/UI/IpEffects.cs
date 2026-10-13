@@ -160,11 +160,11 @@ public class IpEffects : MonoBehaviour
         }
     }
 
-    /// <summary>一次性脉冲：Lock（锁定）/ Achieve（注视达成）/ Feedback（正反馈，金色）/ ReGuide。</summary>
+    /// <summary>一次性脉冲：Lock（锁定）/ Achieve（注视达成）/ Feedback（正反馈，金色）/ ReGuide / Celebrate（跳舞庆典，大爆发）。</summary>
     public void Pulse(string kind)
     {
         _ringT = 0f;
-        _ringKind = kind == "Feedback" ? 1 : 0;
+        _ringKind = (kind == "Feedback" || kind == "Celebrate") ? 1 : 0;
         if (_dust == null) return;
         switch (kind)
         {
@@ -177,6 +177,11 @@ public class IpEffects : MonoBehaviour
             case "Achieve":  EmitDust(14, 0.35f, new Color(0.92f, 0.86f, 1f, 0.55f)); break;
             case "Feedback": EmitDust(30, 0.55f, new Color(1f, 0.92f, 0.6f, 0.6f)); break; // 金色星尘
             case "ReGuide":  EmitDust(10, 0.3f, new Color(0.9f, 0.85f, 1f, 0.5f)); break;
+            case "Celebrate": // 跳舞庆典（2026-10-13）：大簇金色星尘 + 欢呼泡泡
+                EmitDust(60, 0.85f, new Color(1f, 0.94f, 0.65f, 0.65f));
+                EnsureBubble();
+                _bubble.Play("Cheer", 4.0f);
+                break;
         }
     }
 
