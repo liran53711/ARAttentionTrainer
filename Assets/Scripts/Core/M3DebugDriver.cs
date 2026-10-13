@@ -99,6 +99,7 @@ public class M3DebugDriver : MonoBehaviour
 
     // ── 人脸居中保持奖励（2026-10-13 用户定调：老师人脸位于视野中心保持 20s → 精灵跳舞）──
     float _faceHold;                 // 当前"人脸居中"累计秒数（中断快速衰减）
+    float _faceDiagT;                // 人脸诊断日志节拍（2s）
     float _faceDataT = -99f;         // 上次拿到新人脸检测批次的时刻（新鲜度判定）
     int _faceSeenVer = -1;           // 已见过的人脸检测版本号
     float _faceCenteredDist = 99f;   // 当前主脸中心到视野中心的距离（探针/日志用）
@@ -453,6 +454,15 @@ public class M3DebugDriver : MonoBehaviour
                 }
             }
             if (!hasCandidate) _faceCenteredDist = 99f;
+
+            // 真机诊断（2s 一条；有脸或有保持进度时才打，避免空刷屏）
+            _faceDiagT += dt;
+            if (_faceDiagT >= 2f && (hasCandidate || _faceHold > 0.1f))
+            {
+                _faceDiagT = 0f;
+                Debug.Log($"[M3] 人脸: {(hasCandidate ? $"主脸距中心 {_faceCenteredDist:F2}（{(centered ? "居中✓" : farOut ? "偏离" : "边缘")}）" : "无检出")}" +
+                          $" | 保持 {_faceHold:F1}/{celebrateSec:0}s" + (_celebrating ? " | 🎉庆典中" : ""));
+            }
 
             // 保持计时：居中 → 累计；超滞回带 → 快速衰减；中间带 → 不动（滞回）
             if (_celebrating)

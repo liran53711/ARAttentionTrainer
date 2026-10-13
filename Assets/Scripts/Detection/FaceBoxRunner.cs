@@ -35,6 +35,7 @@ public class FaceBoxRunner : MonoBehaviour
     float[] _anchors;              // [22400×4] 常量锚点（初始化时读一次）
     const int AnchorCount = 22400;
     const int MaxFaces = 16;
+    int _runs;                     // 推理次数（心跳节拍）
 
     // SSDBox 解码常量（PaddleDetection blazeface_1000e 训练同款）
     const float V0 = 0.1f, V1 = 0.1f, V2 = 0.2f, V3 = 0.2f;
@@ -108,6 +109,13 @@ public class FaceBoxRunner : MonoBehaviour
         Version++;
         HasRun = true;
         LastMs = (Time.realtimeSinceStartup - t0) * 1000f;
+
+        // 运行期心跳（约 3.3s 一条；2026-10-13：真机排查需要——"没检出脸"与"组件没跑"必须可区分）
+        if (++_runs % 10 == 0)
+            Debug.Log($"[FaceBox] {LastMs:F0}ms 检出 {LatestFaces.Count} 张脸" +
+                      (LatestFaces.Count > 0
+                          ? $" 最高分 {LatestFaces[0].confidence:F2} @({LatestFaces[0].normalizedBox.x + LatestFaces[0].normalizedBox.width * 0.5f:F2},{LatestFaces[0].normalizedBox.y + LatestFaces[0].normalizedBox.height * 0.5f:F2})"
+                          : ""));
     }
 
     /// <summary>
