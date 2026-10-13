@@ -20,7 +20,13 @@ public class SessionLogger
     public SessionLogger(string rootDir, string childName = "", string ipName = "",
                          int interventionLevel = 1, string settingsJson = null)
     {
-        SessionDir = Path.Combine(rootDir, "sessions", BuildSessionFolderName(DateTime.Now));
+        // 2026-10-13 加固：同一秒内重复创建（快速重启/测试机连续跑）会撞目录名 → 文件锁冲突。
+        // 撞名时自动加 _2/_3… 后缀。
+        string baseDir = Path.Combine(rootDir, "sessions", BuildSessionFolderName(DateTime.Now));
+        SessionDir = baseDir;
+        int suffix = 1;
+        while (Directory.Exists(SessionDir) && Directory.GetFiles(SessionDir).Length > 0)
+            SessionDir = baseDir + "_" + (++suffix);
         Directory.CreateDirectory(SessionDir);
         _startTime = Time.realtimeSinceStartup;
 

@@ -79,6 +79,20 @@ public class M3DebugDriver : MonoBehaviour
     bool _arrowShown;                // 引导路当前是否显示（供视图推送）
     bool _prevArrowShown;            // 上升沿检测（方位提示出现的瞬间先喊一次）
     float _voiceRepeatT;             // 方向性语音重复节拍（立体声再定位）
+    float _now;                      // 会话时钟（Tick 驱动；仿真可加速运行）
+    float _lockFxCooldown;           // 重获反馈冷却（每次回来都给"找到啦"，6s 内不重复）
+    float _pendingLockFxAt = -1f;    // 重获后延迟发庆祝的时刻（等待稳定性确认）
+    bool _targetLostEdge;            // 本帧目标丢失边沿
+    bool _targetReacquiredEdge;      // 本帧目标重获边沿
+
+    // ── 测试探针/信号（模拟测试机 M3SimHarness 用；2026-10-13）──
+    public IM3SimInputs sim;         // 非 null → 全部输入来自模拟（测试机模式，可无设备跑 20 分钟场景）
+    public bool simMode => sim != null;
+    public float IpAlphaProbe => _ipAlphaSmooth;
+    public int IpAnimProbe => (int)_ipAnim;
+    public float NowProbe => _now;
+    public event System.Action<string, string> OnSignal;
+    void Signal(string kind, string detail) => OnSignal?.Invoke(kind, detail);
     // 统一输出平滑（2026-10-12：消除状态切换的 alpha/scale 阶跃——用户实测"闪现"的主因之一：
     // 日志中 alpha=1.0/scale=1.0 ↔ alpha=0.55/scale=0.85 是瞬跳，模型瞬间缩 30%）
     float _ipAlphaSmooth, _ipScaleSmooth, _ipScaleVel;
@@ -90,8 +104,12 @@ public class M3DebugDriver : MonoBehaviour
     InteractionState _prevState = InteractionState.Idle;
     static readonly List<DetectionResult> EmptyDetections = new List<DetectionResult>();
 
-    void Start()
+    void Start() => InitCore();
+
+    /// <summary>核心初始化（2026-10-13：从 Start 拆出——编辑器测试机需显式调用，Start 在编辑器不自动跑）。</summary>
+    public void InitCore()
     {
+        if (_sm != null) return; // 幂等
         if (settings != null) settings.ApplyLevel(settings.interventionLevel); // 档位表→阈值字段（须在构造之前）
         _sm = settings != null
             ? new InteractionStateMachine(settings.reGuideCooldownSeconds, settings.feedbackDurationSeconds)
@@ -133,31 +151,51 @@ public class M3DebugDriver : MonoBehaviour
                   $"（gazeStart {settings.gazeStartSeconds:0.0}s / 冷却 {settings.reGuideCooldownSeconds:0.0}s / Peek {settings.peekIntervalSeconds:0.0}s）");
     }
 
-    void Update()
+    void Update() => Tick(Time.deltaTime);
+
+    /// <summary>单帧推进（2026-10-13 重构：从 Update 抽出，测试机可直接以任意 dt 驱动）。</summary>
+    public void Tick(float dtInput)
     {
-        float dt = Time.deltaTime;
+        float dt = dtInput;
         if (dt <= 0f) dt = 1f / 60f;
+        _now += dt;
         _fpsSmooth = Mathf.Lerp(_fpsSmooth, 1f / dt, 0.05f);
 
-        // ── 输入：注视（键盘K模拟）+ 讲话（麦克风VAD优先 → 降级模式 → 键盘L）──
-        bool vadActive = useMicVad && vadService != null && vadService.MicRunning;
-        bool micFallback = useMicVad && vadService != null && !vadService.MicRunning && !simulateGazeWithKeyboard;
-        var kb = Keyboard.current;
-        if (kb != null)
+        // ── 输入：模拟（测试机）优先 → 键盘/麦克风/VAD ──
+        bool vadActive = false, micFallback = false;
+        bool simLooking = false, simSpeaking = false, simSpeechEnded = false, simReset = false;
+        List<DetectionResult> simDetections = null;
+        if (simMode)
         {
-            if (kb.kKey.wasPressedThisFrame) _simLooking = !_simLooking;
-            if (kb.lKey.wasPressedThisFrame && !vadActive) _speaking = !_speaking;
-            if (kb.digit1Key.wasPressedThisFrame) SwitchLevel(0);
-            if (kb.digit2Key.wasPressedThisFrame) SwitchLevel(1);
-            if (kb.digit3Key.wasPressedThisFrame) SwitchLevel(2);
-            if (kb.rKey.wasPressedThisFrame) ResetSession();
+            sim.Tick(dt, out simDetections, out simLooking, out simSpeaking, out simSpeechEnded, out simReset);
+            if (simReset) ResetSession();
         }
-        if (!simulateGazeWithKeyboard && OVRInput.GetDown(OVRInput.Button.One))
-            SwitchLevel((CurrentLevel + 1) % 3); // 真机：手柄 A/X 键循环切档
+        else
+        {
+            vadActive = useMicVad && vadService != null && vadService.MicRunning;
+            micFallback = useMicVad && vadService != null && !vadService.MicRunning && !simulateGazeWithKeyboard;
+            var kb = Keyboard.current;
+            if (kb != null)
+            {
+                if (kb.kKey.wasPressedThisFrame) _simLooking = !_simLooking;
+                if (kb.lKey.wasPressedThisFrame && !vadActive) _speaking = !_speaking;
+                if (kb.digit1Key.wasPressedThisFrame) SwitchLevel(0);
+                if (kb.digit2Key.wasPressedThisFrame) SwitchLevel(1);
+                if (kb.digit3Key.wasPressedThisFrame) SwitchLevel(2);
+                if (kb.rKey.wasPressedThisFrame) ResetSession();
+            }
+            if (!simulateGazeWithKeyboard && OVRInput.GetDown(OVRInput.Button.One))
+                SwitchLevel((CurrentLevel + 1) % 3); // 真机：手柄 A/X 键循环切档
+        }
 
         bool speechEnded;     // 喂状态机的"讲话刚结束"边沿
         bool realSpeechEnd = false; // 真实 VAD 边沿（日志用；降级合成的不算）
-        if (vadActive)
+        if (simMode)
+        {
+            speechEnded = simSpeechEnded;
+            _speaking = simSpeaking;
+        }
+        else if (vadActive)
         {
             speechEnded = vadService.Logic.SpeechEnded;
             realSpeechEnd = speechEnded;
@@ -184,7 +222,8 @@ public class M3DebugDriver : MonoBehaviour
         _prevSpeaking = _speaking;
 
         // ── 跟踪（选目标 + 头部点 + 滤波）──
-        var detections = detector != null ? detector.Latest : EmptyDetections;
+        var detections = simMode ? (simDetections ?? EmptyDetections)
+                                 : (detector != null ? detector.Latest : EmptyDetections);
         var snapshot = _tracker.Tick(detections, dt);
         if (snapshot.valid) _everHadTarget = true;
 
@@ -199,15 +238,21 @@ public class M3DebugDriver : MonoBehaviour
             Debug.Log("[M3] 开场吸引：启动即引导（无需讲话）——带孩子找老师中…");
         }
 
-        if (_prevTargetValid && !snapshot.valid) _logger.LogEvent("TargetLost");
-        if (!_prevTargetValid && snapshot.valid) _logger.LogEvent("TargetAcquired");
+        _targetLostEdge = _prevTargetValid && !snapshot.valid;
+        _targetReacquiredEdge = !_prevTargetValid && snapshot.valid;
+        if (_targetLostEdge) { _logger.LogEvent("TargetLost"); Signal("T", "Lost"); }
+        if (_targetReacquiredEdge) { _logger.LogEvent("TargetAcquired"); Signal("T", "Acquired"); }
         _prevTargetValid = snapshot.valid;
 
         // ── 注视判定 ──
         // 电脑端：视频里"人是否在画面中心"与"孩子是否在看"无关（相机是固定的），
         // 必须用键盘模拟；真机阶段相机会随头转动，才启用几何代理。
         bool looking;
-        if (simulateGazeWithKeyboard)
+        if (simMode)
+        {
+            looking = simLooking;
+        }
+        else if (simulateGazeWithKeyboard)
         {
             looking = _simLooking;
         }
@@ -239,6 +284,7 @@ public class M3DebugDriver : MonoBehaviour
         {
             Debug.Log($"[M3] 状态切换: {_prevState} → {_sm.State}");
             _logger.LogEvent("StateChange", $"{_prevState}->{_sm.State}");
+            Signal("State", $"{_prevState}->{_sm.State}");
             _prevState = _sm.State;
         }
         // 降级模式的合成边沿按 Hidden 期为一轮（离开 Hidden 即解锁，下一轮可再触发）
@@ -248,6 +294,8 @@ public class M3DebugDriver : MonoBehaviour
         if (_sm.GuideTriggered)
         {
             _logger.LogEvent("GuideStart", _simLooking ? "sim" : "auto");
+            Signal("Fx", "Appear");
+            Signal("Voice", snapshot.valid ? "GuideAppear" : "Find");
             audioPlayer?.PlayCue(AudioCue.GuideAppear);
             // 吸引模式（还没找到人）说"看看老师在哪儿呀"，正常引导说"看这里呀"
             voiceCue?.Play(snapshot.valid ? VoiceCue.GuideAppear : VoiceCue.Find, IpVoicePos());
@@ -255,10 +303,12 @@ public class M3DebugDriver : MonoBehaviour
             Debug.Log("[M3] 引导出现 → IP 登场");
         }
         if (_gaze.GazeStarted) _logger.LogEvent("GazeStart");
-        if (_gaze.GazeSustained) _logger.LogEvent("GazeSustained");
+        if (_gaze.GazeSustained) { _logger.LogEvent("GazeSustained"); Signal("Gaze", "Sustained"); }
         if (_sm.FeedbackTriggered)
         {
             _logger.LogEvent("Feedback");
+            Signal("Fx", "Feedback");
+            Signal("Voice", "Feedback");
             audioPlayer?.PlayCue(AudioCue.Feedback);
             voiceCue?.Play(VoiceCue.Feedback, IpVoicePos());
             StartIpFeedback(snapshot);
@@ -295,30 +345,52 @@ public class M3DebugDriver : MonoBehaviour
         // ── IP 动画推进 + 喂给视图 ──
         UpdateIpAnim(dt, snapshot);
 
-        // ── 方位提示（2026-10-12 第四版，用户定调："箭头是低效信息 → 立体声重置注意力"）──
-        //   老师消失在视野中：① IP 飞向"老师相对方位"（视野内缘的该方向位置）；
-        //   ② 从老师所在方位播放方向性语音（立体声定位，孩子自然转头找声源）；周期重复帮助再定位；
-        //   ③ IP 做"找老师"动作（指向+侧身）。箭头方案已停用（GuideArrow 保留备用）。
-        if (ipWorldView != null)
+        // ── 方位提示（2026-10-13 鲁棒性版）──
+        //   ① 稳定性门槛 0.8s→0.35s（用户实测：看一眼就转开，提示不响 = 门槛太苛刻）；
+        //   ② 衰减放缓（0.15/s：看过老师后"认识"保持更久）；
+        //   ③ 每次"从丢失回到有效"都给"找到啦"反馈（此前只给第一次→第二次转回没反应）；
+        //   ④ 逻辑不依赖视图引用（ipWorldView 可空——模拟测试机可全逻辑运行）。
         {
             float lockBefore = _lockStableT;
-            _lockStableT = snapshot.valid ? _lockStableT + dt : Mathf.Max(0f, _lockStableT - dt * 0.5f);
-            if (lockBefore < 0.8f && _lockStableT >= 0.8f)
-                ipWorldView.FxPulse("Lock"); // 稳定锁定老师 → 一圈柔光"找到啦"
+            _lockStableT = snapshot.valid ? _lockStableT + dt : Mathf.Max(0f, _lockStableT - dt * 0.15f);
             _lostT = snapshot.valid ? 0f : _lostT + dt;
-            bool hintOn = !snapshot.valid && _lostT > 0.4f && _lostT < 12f && _lockStableT >= 0.8f;
+            bool stableEnough = _lockStableT >= 0.35f;
+
+            // 重获反馈：边沿后延迟 0.45s"确认"再发（首锁时稳定性尚在累积，边沿即刻判定会被门槛挡住
+            // ——2026-10-13 测试机抓到：首锁庆祝被吞）。仍受 6s 冷却防快速来回刷屏。
+            if (_targetReacquiredEdge) _pendingLockFxAt = _now + 0.45f;
+            if (_pendingLockFxAt > 0f && _now >= _pendingLockFxAt)
+            {
+                _pendingLockFxAt = -1f;
+                if (snapshot.valid && stableEnough && _now >= _lockFxCooldown)
+                {
+                    _lockFxCooldown = _now + 6f;
+                    Signal("Fx", "Lock");
+                    ipWorldView?.FxPulse("Lock");
+                    Debug.Log("[M3] 重新锁定老师 → 找到啦反馈");
+                }
+            }
+
+            bool hintOn = !snapshot.valid && _lostT > 0.6f && _lostT < 15f && stableEnough; // 0.6s：短掉帧不喊语音
             if (hintOn)
             {
-                // ① IP 飞向老师相对方位（不慌不忙，缓速滑过去）
-                Vector2 hint = ipWorldView.TeacherViewportHint();
-                _ipPos = Vector2.Lerp(_ipPos, hint, Mathf.Clamp01(dt * 1.6f));
-                // ② 方向性语音从老师方位传来（立体声定位；出现时立刻喊，之后每 ~3.6s 重复）
-                if (!_prevArrowShown) _voiceRepeatT = 3.6f;
+                // ① IP 飞向老师相对方位
+                if (ipWorldView != null)
+                {
+                    Vector2 hint = ipWorldView.TeacherViewportHint();
+                    _ipPos = Vector2.Lerp(_ipPos, hint, Mathf.Clamp01(dt * 1.6f));
+                }
+                // ② 方向性语音：出现即喊（0.1s 内），此后每 3.6s 重复帮助再定位
+                if (!_prevArrowShown) _voiceRepeatT = 0.1f;
                 _voiceRepeatT -= dt;
                 if (_voiceRepeatT <= 0f)
                 {
                     _voiceRepeatT = 3.6f;
-                    voiceCue?.Play(VoiceCue.Find, ipWorldView.CurrentTeacherPos); // 声源=老师方位
+                    Signal("Voice", "Find");
+                    if (voiceCue != null)
+                        voiceCue.Play(VoiceCue.Find, ipWorldView != null
+                            ? ipWorldView.CurrentTeacherPos
+                            : transform.position + transform.forward);
                 }
             }
             _prevArrowShown = hintOn;
@@ -416,15 +488,15 @@ public class M3DebugDriver : MonoBehaviour
         {
             _heldTargetPos = s.headPoint01;
             _hasHeldTarget = true;
-            _heldTargetTime = Time.time;
+            _heldTargetTime = _now;
             return _heldTargetPos;
         }
-        if (_hasHeldTarget && Time.time - _heldTargetTime < 2.5f) return _heldTargetPos;
+        if (_hasHeldTarget && _now - _heldTargetTime < 2.5f) return _heldTargetPos;
         return new Vector2(0.5f, 0.5f);
     }
 
     /// <summary>平滑追赶后的目标（所有动画状态统一用它，吸收检测抖动）。大跨度（重锁）直接吸附防长距离飞行。</summary>
-    Vector2 SmoothTarget(TargetSnapshot s)
+    Vector2 SmoothTarget(TargetSnapshot s, float dt)
     {
         var raw = TargetOrCenter(s);
         if (Vector2.Distance(_smoothTarget, raw) > 0.4f)
@@ -434,7 +506,7 @@ public class M3DebugDriver : MonoBehaviour
         }
         else
         {
-            _smoothTarget = Vector2.SmoothDamp(_smoothTarget, raw, ref _smoothTargetVel, 0.15f, 20f, Time.deltaTime);
+            _smoothTarget = Vector2.SmoothDamp(_smoothTarget, raw, ref _smoothTargetVel, 0.15f, 20f, dt);
         }
         return _smoothTarget;
     }
@@ -443,7 +515,7 @@ public class M3DebugDriver : MonoBehaviour
     {
         _ipAnimT += dt;
         if (_ipAnim != IpAnim.Hidden) _everShown = true;
-        Vector2 tgt = SmoothTarget(snapshot); // 每帧刷新（先于各状态使用）
+        Vector2 tgt = SmoothTarget(snapshot, dt); // 每帧刷新（先于各状态使用）
         // 陪伴换边：方位平滑滑过去（不再左右瞬移）
         _companionSideSmooth = Mathf.SmoothDamp(_companionSideSmooth, _companionSide, ref _companionSideVel, 0.45f, 20f, dt);
         switch (_ipAnim)
@@ -459,7 +531,7 @@ public class M3DebugDriver : MonoBehaviour
                 break;
             }
             case IpAnim.GuidingMove: // 悬浮在目标上方，轻微起伏
-                _ipPos = tgt + new Vector2(0f, -0.06f + Mathf.Sin(Time.time * 1.9f) * 0.010f);
+                _ipPos = tgt + new Vector2(0f, -0.06f + Mathf.Sin(_now * 1.9f) * 0.010f);
                 _ipAlpha = 1f;
                 _ipScale = 1f;
                 if (_sm.State != InteractionState.Guiding) // 离开引导 → 进入"陪伴模式"（不消失）
@@ -481,15 +553,15 @@ public class M3DebugDriver : MonoBehaviour
                 }
                 _ipPos = tgt + new Vector2(
                     _companionSideSmooth * 0.115f,
-                    -0.035f + Mathf.Sin(Time.time * 1.35f) * 0.009f);
-                _ipScale = 0.85f + 0.05f * Mathf.Sin(Time.time * 1.7f);
+                    -0.035f + Mathf.Sin(_now * 1.35f) * 0.009f);
+                _ipScale = 0.85f + 0.05f * Mathf.Sin(_now * 1.7f);
                 if (_sm.State == InteractionState.Idle)
                 {
                     // 待机期：有目标（含短暂丢失保持期）半透明待着；长期无目标也【不消失】——
                     // ★2026-10-13 修复（用户实测："长时间没看到人脸，IP 自己消失了"）：
                     // 设计原则"小精灵不允许消失"——无目标时降到 0.35 半透明守候，绝不淡出为 0。
                     bool targetAlive = snapshot.valid
-                        || (_hasHeldTarget && Time.time - _heldTargetTime < 2.5f);
+                        || (_hasHeldTarget && _now - _heldTargetTime < 2.5f);
                     _ipAlpha = targetAlive
                         ? Mathf.MoveTowards(_ipAlpha, 0.55f, dt * 0.8f)
                         : Mathf.MoveTowards(_ipAlpha, 0.35f, dt * 0.8f);
@@ -525,7 +597,7 @@ public class M3DebugDriver : MonoBehaviour
                 _ipPos = Vector2.Lerp(_ipFrom, _ipDest, e);
                 float dur = settings != null ? settings.peekDurationSeconds : 0.8f;
                 float t = _ipAnimT;
-                float targetAlpha = t < dur - 0.25f ? 1f : 0f;
+                float targetAlpha = t < dur - 0.25f ? 1f : 0.2f; // 保守化：淡到 0.2 即止（绝对禁止消失）
                 _ipAlpha = Mathf.MoveTowards(_ipAlpha, targetAlpha, dt * 4.5f);
                 _ipScale = Mathf.Lerp(0.85f, 1f, e);
                 if (t >= dur)
@@ -581,6 +653,9 @@ public class M3DebugDriver : MonoBehaviour
         _everShown = false;
         _ipSmoothInit = false;
         _lockStableT = 0f;
+        _lockFxCooldown = 0f;
+        _targetLostEdge = false;
+        _targetReacquiredEdge = false;
         _lostT = 999f;
         _arrowShown = false;
         _prevArrowShown = false;

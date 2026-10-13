@@ -140,6 +140,9 @@ public class IpEffects : MonoBehaviour
         var rend = go.GetComponent<ParticleSystemRenderer>();
         rend.sharedMaterial = starMat != null ? starMat : glowMat;
         rend.renderMode = ParticleSystemRenderMode.Billboard;
+        // ★2026-10-13 修复：运行时必须 Play——此前只配置未播放（并主动 Stop 过），
+        //   粒子系统在停止态不模拟 → 用户实测"全程没有看到粒子特效"的根因。
+        if (Application.isPlaying) _dust.Play();
     }
 
     /// <summary>状态切换（由 IPWorldView 驱动）。</summary>
