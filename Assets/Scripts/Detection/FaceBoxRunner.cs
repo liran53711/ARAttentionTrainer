@@ -110,12 +110,19 @@ public class FaceBoxRunner : MonoBehaviour
         HasRun = true;
         LastMs = (Time.realtimeSinceStartup - t0) * 1000f;
 
-        // 运行期心跳（约 3.3s 一条；2026-10-13：真机排查需要——"没检出脸"与"组件没跑"必须可区分）
+        // 运行期心跳（约 3.3s 一条；2026-10-13：真机排查需要——"没检出脸"与"组件没跑"必须可区分；
+        // 附 top3 位置/分数，便于判断假脸分布）
         if (++_runs % 10 == 0)
-            Debug.Log($"[FaceBox] {LastMs:F0}ms 检出 {LatestFaces.Count} 张脸" +
-                      (LatestFaces.Count > 0
-                          ? $" 最高分 {LatestFaces[0].confidence:F2} @({LatestFaces[0].normalizedBox.x + LatestFaces[0].normalizedBox.width * 0.5f:F2},{LatestFaces[0].normalizedBox.y + LatestFaces[0].normalizedBox.height * 0.5f:F2})"
-                          : ""));
+        {
+            string top = "";
+            int n = Mathf.Min(3, LatestFaces.Count);
+            for (int i = 0; i < n; i++)
+            {
+                var c = LatestFaces[i].normalizedBox.center;
+                top += $" ({c.x:F2},{c.y:F2}){LatestFaces[i].confidence:F2}";
+            }
+            Debug.Log($"[FaceBox] {LastMs:F0}ms 检出 {LatestFaces.Count} 张脸{top}");
+        }
     }
 
     /// <summary>

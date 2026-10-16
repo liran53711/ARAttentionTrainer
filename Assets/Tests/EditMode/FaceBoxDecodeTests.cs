@@ -97,4 +97,38 @@ public class FaceBoxDecodeTests
         var r = FaceBoxRunner.Decode(reg, cls, anchors, 5, Thresh, MinW);
         Assert.AreEqual(1, r.Count);
     }
+
+    // ── 人脸-人体关联（2026-10-13 假脸过滤；M3DebugDriver.FaceBelongsToPerson）──
+    // 人体框：x∈[0.4,0.7], y∈[0.2,0.7]（宽 0.3 高 0.5）——头部区域 = y < 0.2 + 0.5*0.55 = 0.475
+    static readonly Rect Person = new Rect(0.4f, 0.2f, 0.3f, 0.5f);
+
+    [Test]
+    public void Face_OnUpperBody_Belongs()
+    {
+        Assert.IsTrue(M3DebugDriver.FaceBelongsToPerson(new Vector2(0.55f, 0.30f), Person), "框顶部的脸应属于该人体");
+    }
+
+    [Test]
+    public void Face_OnLowerBody_NotBelongs()
+    {
+        Assert.IsFalse(M3DebugDriver.FaceBelongsToPerson(new Vector2(0.55f, 0.65f), Person), "框下部（腰部/胸前）的'脸'应被拒（假脸）");
+    }
+
+    [Test]
+    public void Face_OutsideBox_NotBelongs()
+    {
+        Assert.IsFalse(M3DebugDriver.FaceBelongsToPerson(new Vector2(0.85f, 0.30f), Person), "框外的脸（海报等）应被拒");
+    }
+
+    [Test]
+    public void Face_NearEdge_WithinMargin_Belongs()
+    {
+        Assert.IsTrue(M3DebugDriver.FaceBelongsToPerson(new Vector2(0.37f, 0.24f), Person), "检测抖动的边距内应容忍");
+    }
+
+    [Test]
+    public void EmptyPersonBox_NotBelongs()
+    {
+        Assert.IsFalse(M3DebugDriver.FaceBelongsToPerson(new Vector2(0.5f, 0.3f), new Rect(0.5f, 0.3f, 0f, 0f)), "无效人体框应拒绝");
+    }
 }

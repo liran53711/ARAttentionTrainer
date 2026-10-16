@@ -94,6 +94,7 @@ public class M3DebugDriver : MonoBehaviour
     public float NowProbe => _now;
     public float FaceHoldProbe => _faceHold;
     public bool FaceCelebrateProbe => _celebrating;
+    public Vector2 IpPosProbe => _ipPos;   // 精灵视口位置（harness 统计"跳变"诊断用）
     public event System.Action<string, string> OnSignal;
     void Signal(string kind, string detail) => OnSignal?.Invoke(kind, detail);
 
@@ -431,7 +432,9 @@ public class M3DebugDriver : MonoBehaviour
             bool freshFaces = _now - _faceDataT < freshWin;
             var faces = simMode ? _simFaces : (faceRunner != null ? faceRunner.LatestFaces : null);
 
-            // 选"最可信的中央脸"：框宽达标 → 取中心离视野中心最近者（= 孩子正在注视的那张脸）
+            // 选"最可信的中央脸"：①框宽达标 ②必须属于某个检测到的人体（防海报/纹理假脸——
+            // 2026-10-13 真机实测："检出 16 张脸"（房间纹理过检）；无关联时假脸居中也会触发奖励，
+            // 奖励与孩子真实行为脱节）→ 取中心离视野中心最近者（= 孩子正在注视的老师的脸）
             bool hasCandidate = false, centered = false, farOut = true;
             if (freshFaces && faces != null && faces.Count > 0)
             {
@@ -441,9 +444,9 @@ public class M3DebugDriver : MonoBehaviour
                 {
                     var b = faces[i].normalizedBox;
                     if (b.width < minW) continue;
-                    float dx = b.x + b.width * 0.5f - 0.5f;
-                    float dy = b.y + b.height * 0.5f - 0.5f;
-                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+                    var c = new Vector2(b.x + b.width * 0.5f, b.y + b.height * 0.5f);
+                    if (!FaceBelongsToAnyPerson(c, detections)) continue; // 不属于任何人体 → 非老师的脸
+                    float d = Vector2.Distance(c, new Vector2(0.5f, 0.5f));
                     if (d < bestD) { bestD = d; hasCandidate = true; }
                 }
                 if (hasCandidate)
@@ -457,11 +460,15 @@ public class M3DebugDriver : MonoBehaviour
 
             // 真机诊断（2s 一条；有脸或有保持进度时才打，避免空刷屏）
             _faceDiagT += dt;
-            if (_faceDiagT >= 2f && (hasCandidate || _faceHold > 0.1f))
+            if (_faceDiagT >= 2f && (hasCandidate || _faceHold > 0.1f || (faces != null && faces.Count > 0)))
             {
                 _faceDiagT = 0f;
-                Debug.Log($"[M3] 人脸: {(hasCandidate ? $"主脸距中心 {_faceCenteredDist:F2}（{(centered ? "居中✓" : farOut ? "偏离" : "边缘")}）" : "无检出")}" +
-                          $" | 保持 {_faceHold:F1}/{celebrateSec:0}s" + (_celebrating ? " | 🎉庆典中" : ""));
+                string faceInfo = hasCandidate
+                    ? $"主脸距中心 {_faceCenteredDist:F2}（{(centered ? "居中✓" : farOut ? "偏离" : "边缘")}）"
+                    : (freshFaces && faces != null && faces.Count > 0
+                        ? $"检出 {faces.Count} 张脸但均不属于人体（假脸已过滤）"
+                        : "无检出");
+                Debug.Log($"[M3] 人脸: {faceInfo} | 保持 {_faceHold:F1}/{celebrateSec:0}s" + (_celebrating ? " | 🎉庆典中" : ""));
             }
 
             // 保持计时：居中 → 累计；超滞回带 → 快速衰减；中间带 → 不动（滞回）
@@ -602,6 +609,26 @@ public class M3DebugDriver : MonoBehaviour
 
     Vector3 IpVoicePos() => ipWorldView != null ? ipWorldView.CurrentWorldPos : transform.position;
 
+    /// <summary>脸中心是否落在某个检测到的人体框的"头部区域"内（框上半部 + 少量边距）。
+    /// 2026-10-13：把 BlazeFace 的过检假脸（海报/纹理）挡在奖励逻辑外——只认"老师身上的脸"。</summary>
+    public static bool FaceBelongsToAnyPerson(Vector2 faceCenter, List<DetectionResult> persons)
+    {
+        if (persons == null) return false;
+        for (int i = 0; i < persons.Count; i++)
+            if (FaceBelongsToPerson(faceCenter, persons[i].normalizedBox)) return true;
+        return false;
+    }
+
+    /// <summary>单框判定（纯函数，EditMode 测试覆盖）。人体框上半部 = 框高的 55% 区域；边距容忍检测抖动。</summary>
+    public static bool FaceBelongsToPerson(Vector2 faceCenter, Rect personBox)
+    {
+        if (personBox.width <= 0f || personBox.height <= 0f) return false;
+        return faceCenter.x > personBox.x - 0.05f
+            && faceCenter.x < personBox.x + personBox.width + 0.05f
+            && faceCenter.y > personBox.y - 0.12f
+            && faceCenter.y < personBox.y + personBox.height * 0.55f;
+    }
+
     /// <summary>目标点：有效→刷新保持值；短暂丢失（&lt;2.5s）→保持最后位置（防闪回中央）；彻底无目标→视野中央。</summary>
     Vector2 TargetOrCenter(TargetSnapshot s)
     {
@@ -616,18 +643,25 @@ public class M3DebugDriver : MonoBehaviour
         return new Vector2(0.5f, 0.5f);
     }
 
-    /// <summary>平滑追赶后的目标（所有动画状态统一用它，吸收检测抖动）。大跨度（重锁）直接吸附防长距离飞行。</summary>
+    /// <summary>平滑追赶后的目标（所有动画状态统一用它，吸收检测抖动）。
+    /// ★2026-10-13 修正（自检 I7 实测：单帧跳变最高 0.605 视口单位、1.6 次/分钟"闪现"）：
+    ///   此前"跨度 >0.4 直接吸附"在目标换位（如老师从画面中央走到侧面）时造成视觉瞬移；
+    ///   现改为：>0.4 用"急促但可见"的追赶（时间常数 0.10s、限速 8/s）——快速飞过去而非闪过去；
+    ///   只有 >1.0（重生/跨房间级）才直接吸附。</summary>
     Vector2 SmoothTarget(TargetSnapshot s, float dt)
     {
         var raw = TargetOrCenter(s);
-        if (Vector2.Distance(_smoothTarget, raw) > 0.4f)
+        float d = Vector2.Distance(_smoothTarget, raw);
+        if (d > 1.0f)
         {
             _smoothTarget = raw;
             _smoothTargetVel = Vector2.zero;
         }
         else
         {
-            _smoothTarget = Vector2.SmoothDamp(_smoothTarget, raw, ref _smoothTargetVel, 0.15f, 20f, dt);
+            float st = d > 0.4f ? 0.10f : 0.15f;
+            float ms = d > 0.4f ? 8f : 20f;
+            _smoothTarget = Vector2.SmoothDamp(_smoothTarget, raw, ref _smoothTargetVel, st, ms, dt);
         }
         return _smoothTarget;
     }
