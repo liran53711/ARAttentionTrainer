@@ -100,6 +100,7 @@ public static class DeviceSceneCreator
         driver.audioPlayer = audio;
         driver.voiceCue = voice;
         driver.vadService = vad;
+        driver.eye = rig.centerEyeAnchor; // 首寻 3D 漫游起点（头位）
         driver.simulateGazeWithKeyboard = false; // 真机：几何注视代理（脸在视野中心+新鲜度）
         driver.useMicVad = true;                 // 真机：真实麦克风 VAD
         // ipView 留空：IP（小精灵）可视化是下一步的世界空间版
@@ -164,6 +165,26 @@ public static class DeviceSceneCreator
         face.frameSource = source;
         face.settings = settings;
         driver.faceRunner = face;
+
+        // ── 10.68) 流星引导视图（2026-10-20 交互方案 v2）：流星/星环 + 星尘路径 ──
+        // ★2026-10-20 修：star_soft.png 的内容只占左上 128×128 象限（每颗星偏在面片左上角），
+        //   现统一改用居中裁切的 star_dot.png（MeteorSystem 头/星环 + 星路）。
+        var starDotMat = EnsureTexturedMat("Assets/Materials/StarDot.mat", "Assets/Art/IP/star_dot.png");
+        var meteorGO = new GameObject("MeteorSystem");
+        meteorGO.transform.SetParent(rigGO.transform, false);
+        var meteor = meteorGO.AddComponent<MeteorSystem>();
+        meteor.starMat = starDotMat;
+        meteor.trailMat = EnsureTexturedMat("Assets/Materials/FxGlow.mat", "Assets/Art/IP/glow_soft.png");
+        meteor.eye = rig.centerEyeAnchor;
+        driver.meteorView = meteor;
+
+        var stardustGO = new GameObject("StardustPath");
+        stardustGO.transform.SetParent(rigGO.transform, false);
+        var stardust = stardustGO.AddComponent<StardustPath>();
+        stardust.starMat = starDotMat;
+        stardust.eye = rig.centerEyeAnchor;
+        stardust.mruk = rigGO.GetComponent<MrukBootstrap>(); // 地板高度（房间数据）
+        driver.stardustPath = stardust;
 
         // ── 10.7) A：人物遮挡（屏幕空间擦除）——2026-10-11 用户定调："遮挡难做就不要了"
         // 默认关闭：Scene 里不再生成 MaskOccluder（MaskOccluder.cs / MaskErase.shader 保留，

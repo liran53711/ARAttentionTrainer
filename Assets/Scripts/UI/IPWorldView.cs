@@ -18,7 +18,7 @@ using UnityEngine;
 public class IPWorldView : MonoBehaviour
 {
     /// <summary>C 项：驱动层推送的动画状态（与 M3DebugDriver.IpAnim 顺序一一对应）。</summary>
-    public enum IPAnimState { Hidden = 0, Appearing = 1, Guiding = 2, Companion = 3, Feedback = 4, Peek = 5 }
+    public enum IPAnimState { Hidden = 0, Appearing = 1, Guiding = 2, Companion = 3, Feedback = 4, Peek = 5, Search = 6 }
     public IPAnimState animState;
     [Header("引用")]
     public PcaFrameSource frameSource;
@@ -45,6 +45,14 @@ public class IPWorldView : MonoBehaviour
     [Tooltip("驱动推送：身体朝老师方向侧转比例（0=完全面向孩子，0.5=一半朝向老师）")]
     public float faceTeacherBlend;
     float _nextPoint;
+
+    [Header("首寻 3D 漫游（世界坐标覆盖）")]
+    [Tooltip("开启时精灵直接飞到 worldOverridePos（允许飞出视野），不走视口锚定")]
+    public bool worldOverrideActive;
+    [Tooltip("驱动层每帧推送的漫游世界坐标")]
+    public Vector3 worldOverridePos;
+    [Tooltip("漫游时的最大追赶速度（米/秒）")]
+    public float worldOverrideMaxSpeed = 2.0f;
 
     [Header("移动平滑（First Encounters 手感）")]
     [Tooltip("渲染位置追赶锚点的时间常数（秒）——抹平 5Hz 重锚步进（2026-10-12 二调 0.26→0.32）")]
@@ -101,8 +109,10 @@ public class IPWorldView : MonoBehaviour
     /// <summary>精灵当前的世界位置（平滑后的渲染位置；语音空间定位用）。</summary>
     public Vector3 CurrentWorldPos => _hasRenderPos ? _renderWorldPos : transform.position;
 
-    /// <summary>老师相对视野的方位提示点（视口坐标）：老师可见时=其投影附近；不可见时=该方向的视野内缘。
-    /// 用于"IP 飞向老师相对方位"（2026-10-12 用户定调：立体声引导方案）。</summary>
+    /// <summary>老师相对视野的方位提示点（视口坐标）：按【水平方位角】映射到屏幕边缘方向。
+    /// ★2026-10-20 重写（用户实测"方向不对/空间定位没生效"）：
+    ///   旧实现只投影 dLocal.x/dLocal.y，**忽略 z 分量**——老师位于背后时左右方向会镜像反转。
+    ///   现改用 atan2(x,z) 的方位角：正前→屏幕中央偏上，右侧→右缘，背后→按转身方向指向左右边缘。</summary>
     public Vector2 TeacherViewportHint()
     {
         if (!_hasTeacherPos) return new Vector2(0.5f, 0.6f);
@@ -119,12 +129,23 @@ public class IPWorldView : MonoBehaviour
             camPos = transform.position;
             camRot = transform.rotation;
         }
-        Vector3 dLocal = Quaternion.Inverse(camRot) * (_teacherPos - camPos);
-        var dir = new Vector2(dLocal.x, -dLocal.y); // 视口 y 向下
-        if (dir.sqrMagnitude < 1e-4f) return new Vector2(0.5f, 0.6f);
-        dir.Normalize();
-        var hint = new Vector2(0.5f + dir.x * 0.34f, 0.6f + dir.y * 0.24f);
-        return new Vector2(Mathf.Clamp(hint.x, 0.15f, 0.85f), Mathf.Clamp(hint.y, 0.2f, 0.85f));
+        Vector3 local = Quaternion.Inverse(camRot) * (_teacherPos - camPos); // x右 y上 z前
+        float horiz = new Vector2(local.x, local.z).magnitude;
+        if (horiz < 1e-3f) return new Vector2(0.5f, 0.6f);
+
+        // 水平方位角：0=正前，正=右侧，±π=正后（含背后镜像的正确处理）
+        float yaw = Mathf.Atan2(local.x, local.z); // (-π, π]
+        float edge = Mathf.Clamp(yaw / (Mathf.PI * 0.45f), -1f, 1f); // ±81° 内线性铺满左右
+        if (Mathf.Abs(yaw) > Mathf.PI * 0.45f)
+        {
+            // 侧后方/正后方：方向保留在对应侧边缘（转身方向正确）
+            float tail = Mathf.Clamp01((Mathf.Abs(yaw) - Mathf.PI * 0.45f) / (Mathf.PI * 0.55f));
+            edge = Mathf.Sign(yaw) * (0.75f + 0.25f * tail);
+        }
+        float hintX = Mathf.Clamp(0.5f + edge * 0.4f, 0.12f, 0.88f);
+        float elev = Mathf.Atan2(local.y, Mathf.Max(1e-3f, horiz));
+        float hintY = Mathf.Clamp(0.5f - elev / (Mathf.PI * 0.4f) * 0.3f, 0.2f, 0.85f);
+        return new Vector2(hintX, hintY);
     }
 
     /// <summary>驱动层转发一次性特效脉冲（Lock/Achieve/Feedback/ReGuide/Celebrate）。</summary>
@@ -132,6 +153,7 @@ public class IPWorldView : MonoBehaviour
 
     // ── 跳舞庆典（2026-10-13 用户定调：人脸居中保持 20s → 精灵跳舞奖励）──
     float _celebrateStart = -999f, _celebrateUntil = -999f, _nextCelebFx;
+    bool _wasCelebrating;
     /// <summary>庆典是否进行中（驱动层/测试探针用）。</summary>
     public bool IsCelebrating => Time.time < _celebrateUntil;
 
@@ -155,8 +177,49 @@ public class IPWorldView : MonoBehaviour
         }
     }
 
+    /// <summary>提前收尾庆典（2026-10-20：孩子移开视线时调用）——在 fadeSec 内柔和结束舞蹈。</summary>
+    public void EndCelebrate(float fadeSec = 0.8f)
+    {
+        if (!IsCelebrating) return;
+        _celebrateUntil = Time.time + Mathf.Max(0f, fadeSec);
+    }
+
+    /// <summary>庆典结束（自然到点或提前收尾）→ 恢复情绪/表情/动画状态。
+    /// ★2026-10-20：修复"移开视线后精灵一直跳舞"——庆典的 Feedback 情绪（弹跳+高频光晕）
+    ///   和 Encourage 表情此前无人清除，会永久覆盖 Companion/Guiding 的日常状态。</summary>
+    void RestoreAfterCelebrate()
+    {
+        if (_fx != null) _fx.SetMood(_visualAnim); // 回到当前视觉状态对应的情绪
+        _exprCurrent = "";
+        DriveExpression(_visualAnim);              // 清除 Encourage，恢复微笑/好奇
+        // 若庆典被提前收尾，HappyFeedback 动作片段可能仍在播放 → 强制切回日常动作
+        if (animator != null)
+        {
+            string st = _visualAnim == IPAnimState.Companion ? "CompanionIdle"
+                      : (_visualAnim == IPAnimState.Guiding || _visualAnim == IPAnimState.Search) ? "GuideFly"
+                      : "IdleFly";
+            animator.CrossFadeInFixedTime(st, 0.15f);
+        }
+        Debug.Log($"[IP] 庆典收尾 → 恢复情绪/动画（视觉状态={_visualAnim}）");
+    }
+
+    /// <summary>锚点距离交叉校验（纯函数，供单测）：环境射线与身高估计严重矛盾时以身高为准。
+    /// 2026-10-21 真机日志：height01=0.118（远处的人）时射线打到 0.55m 的课桌 → 老师锚点被拉到 0.75m。</summary>
+    public static float ResolveTargetDistance(float distByHeight, float rayHit, bool hasRayHit, float boxHeight01)
+    {
+        if (!hasRayHit || rayHit <= 0.3f || rayHit >= 8f) return distByHeight;
+        // 人框很小 = 人很远：0.3~1m 的"命中"几乎一定是课桌/椅子/墙，不可信
+        if (boxHeight01 < 0.25f && rayHit < 1.0f) return distByHeight;
+        // 与身高估计严重矛盾（<0.35x 或 >1.8x）→ 以身高估计为准
+        float ratio = rayHit / Mathf.Max(0.1f, distByHeight);
+        if (ratio < 0.35f || ratio > 1.8f) return distByHeight;
+        return rayHit;
+    }
+
     /// <summary>老师的世界位置（独立锚点；丢失时=最后已知方位——"人脸可丢，方向不丢"，引导路终点用）。</summary>
     public Vector3 CurrentTeacherPos => _hasTeacherPos ? _teacherPos : CurrentWorldPos;
+    /// <summary>是否已建立过老师空间锚点（未锁过目标时星路不应出现）。</summary>
+    public bool HasTeacherAnchor => _hasTeacherPos;
 
     // 老师独立锚点：路标模式下精灵飞走了，老师的方位要单独记住
     Vector3 _teacherPos;
@@ -211,6 +274,14 @@ public class IPWorldView : MonoBehaviour
         if (_renderer == null) return;
         EnsureStick();
 
+        // ★2026-10-20 修复（用户实测"移开视线后庆祝动作还在继续"）：
+        //   Celebrate() 把情绪切到 Feedback（9Hz 弹跳）并设 Encourage 表情，但庆典结束
+        //   （自然到点/提前收尾）时此前从未恢复；DriveAnimator 只在"视觉状态切换"时更新情绪，
+        //   而庆典前后一直是 Companion → 弹跳/表情会永久残留。这里在庆典结束的那一帧统一恢复。
+        bool celebratingNow = IsCelebrating;
+        if (_wasCelebrating && !celebratingNow) RestoreAfterCelebrate();
+        _wasCelebrating = celebratingNow;
+
         // 不可见：火柴人走"材质淡出"（平滑，不闪现）；无火柴人的模型才用 SetActive
         if (!visible || alpha <= 0.01f)
         {
@@ -255,17 +326,28 @@ public class IPWorldView : MonoBehaviour
         bool anchorable = targetValid || signpostMode || segChanged || !_everHadValidTarget;
         bool rebuild = !_hasWorldPos || (anchorable && (versionChanged || animMoved || segChanged));
 
-        if (rebuild)
+        if (worldOverrideActive)
+        {
+            // ★2026-10-20 首寻 3D 漫游：驱动层直接给世界坐标（允许飞出视野），
+            //   不做视口反投影/老师锚定；房间边界仍然生效。
+            _hasWorldPos = true;
+            Vector3 p = worldOverridePos;
+            if (mruk != null && mruk.TryGetRoomBounds(out var roamRoom))
+                p = ClampToRoom(p, roamRoom, roomMargin, floorMinY, ceilClearance);
+            _lastWorldPos = p;
+        }
+        else if (rebuild)
         {
             _prevAnimPos = new Vector2(x01, y01);
 
             float texH = frame.texture.height;
             float hPx = height01 * texH;
-            float dist;
+            float distByHeight;
             if (hPx > 8f)
-                dist = Mathf.Clamp(frame.focalLengthPx * assumedPersonHeight / hPx, 0.3f, 8f);
+                distByHeight = Mathf.Clamp(frame.focalLengthPx * assumedPersonHeight / hPx, 0.3f, 8f);
             else
-                dist = attractDefaultDistance; // 吸引模式：还没有人脸框 → 固定距离出现在视野中央
+                distByHeight = attractDefaultDistance; // 吸引模式：还没有人脸框 → 固定距离出现在视野中央
+            float dist = distByHeight;
 
             // 陪伴模式 + 有轮廓掩码：位置改为"贴住真实轮廓边缘"（用户定调：与人脸贴合互动）
             var target01 = new Vector2(x01, y01);
@@ -285,13 +367,18 @@ public class IPWorldView : MonoBehaviour
             // B（MRUK 环境射线实测距离）：有深度/房间数据时优先；失败回退身高公式
             // （预声明命中结构：C# 对"短路链中 out var"的明确赋值分析会误报）
             EnvironmentRaycastHit hit = default;
+            bool hasHit = false;
+            float dHit = 0f;
             if (envRaycast != null &&
                 envRaycast.Raycast(ray, out hit, 8f) &&
                 hit.status == EnvironmentRaycastHitStatus.Hit)
             {
-                float dHit = Vector3.Distance(ray.origin, hit.point);
-                if (dHit > 0.3f && dHit < 8f) dist = dHit;
+                dHit = Vector3.Distance(ray.origin, hit.point);
+                hasHit = dHit > 0.3f && dHit < 8f;
             }
+            // ★2026-10-21 修：环境射线可能打到课桌/墙（真机日志：0.55m），
+            //   把老师锚点拉到 0.75m → 星路只有 0.44m 长，视觉上"一团星星"。
+            dist = ResolveTargetDistance(distByHeight, dHit, hasHit, height01);
 
             Vector3 right = frame.cameraPose.rotation * Vector3.right;
             Vector3 up = frame.cameraPose.rotation * Vector3.up;
@@ -324,7 +411,10 @@ public class IPWorldView : MonoBehaviour
         }
 
         // ── 连续追赶（核心修复）：渲染位置逐帧平滑趋近锚点，5Hz 重锚不再瞬跳 ──
-        if (!_hasRenderPos || Vector3.Distance(_renderWorldPos, _lastWorldPos) > snapDistance)
+        // 首寻漫游：路径点跨度可达数米，不能用普通 snapDistance 瞬移；用更高的限速平滑飞过去。
+        float snapDist = worldOverrideActive ? 8f : snapDistance;
+        float maxSpd = worldOverrideActive ? worldOverrideMaxSpeed : maxSpeed;
+        if (!_hasRenderPos || Vector3.Distance(_renderWorldPos, _lastWorldPos) > snapDist)
         {
             _renderWorldPos = _lastWorldPos; // 首帧/大跨度（重生）→ 吸附
             _posVel = Vector3.zero;
@@ -333,7 +423,7 @@ public class IPWorldView : MonoBehaviour
         else
         {
             _renderWorldPos = Vector3.SmoothDamp(_renderWorldPos, _lastWorldPos, ref _posVel,
-                                                 positionSmoothTime, maxSpeed, Time.deltaTime);
+                                                 positionSmoothTime, maxSpd, Time.deltaTime);
         }
 
         // ── 精灵贴图路径（无 3D 模型时的回退）──
@@ -488,7 +578,7 @@ public class IPWorldView : MonoBehaviour
         }
         if (animator != null)
         {
-            animator.SetBool("Guiding", visual == IPAnimState.Guiding);
+            animator.SetBool("Guiding", visual == IPAnimState.Guiding || visual == IPAnimState.Search);
             animator.SetBool("Companion", visual == IPAnimState.Companion);
             switch (visual)
             {
@@ -509,6 +599,7 @@ public class IPWorldView : MonoBehaviour
         {
             case IPAnimState.Appearing: want = "Surprised"; break;
             case IPAnimState.Guiding:   want = "Curious"; break;   // 引导=好奇张望
+            case IPAnimState.Search:    want = "Curious"; break;   // 首寻漫游=好奇找人
             case IPAnimState.Feedback:  want = "Encourage"; break; // 正反馈=鼓励笑
             case IPAnimState.Peek:      want = "Curious"; break;   // 探头=好奇
             default:                    want = "Smile"; break;     // 陪伴/待机

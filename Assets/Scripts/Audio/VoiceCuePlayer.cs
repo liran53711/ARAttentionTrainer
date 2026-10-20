@@ -1,11 +1,21 @@
 // Assets/Scripts/Audio/VoiceCuePlayer.cs
-// 语音指导：播放预生成的语音片段（Assets/Resources/Voice/*.mp3）。
-// Quest 无系统 TTS 引擎 → 预生成音频（edge-tts，年轻女声 zh-CN-XiaoyiNeural）。
-// 后续替换为真人录音：保持同名同路径即可，本组件无需改动。
-// 片段缺失时静默跳过（由 AudioCuePlayer 的音效兜底）。
+// 语音播放器（2026-10-20：流星引导话术 + 语音仲裁）：
+//   · 预生成语音片段（Assets/Resources/Voice/*.wav/mp3），WAV 由 Windows OneCore 合成（Microsoft Yaoyao）
+//   · **语音仲裁**：同一时刻只播一条（VoiceArbiter：优先级/打断/排队/间隔）——修复"同时好几条语音"
+//   · 正式替换为真人录音：保持同名同路径即可，本组件无需改动。
+using System.Collections.Generic;
 using UnityEngine;
 
-public enum VoiceCue { GuideAppear, Find, Feedback, Peek, Celebrate }
+public enum VoiceCue
+{
+    GuideAppear, Find, Feedback, Peek,                 // 原有（引导出现/找老师/正反馈/陪伴）
+    Start,                                             // 开场吸引
+    Confused, Found, Lead1, Lead2, Lead3, Success,     // 找老师三段式（第1-3轮强化）
+    StarChase, StarLead, StarFirst,                    // 追星星话术
+    MeteorShower, Celebrate,                           // 流星雨/庆典
+    Rest, Hum,                                         // 静默休息/陪伴哼歌
+    SearchStart, SearchLook, SearchHere, SearchAgain, SearchWhere, SearchFound // 首寻 3D 漫游
+}
 
 public class VoiceCuePlayer : MonoBehaviour
 {
@@ -14,7 +24,42 @@ public class VoiceCuePlayer : MonoBehaviour
     [Range(0f, 1f)] public float spatialBlend = 0.6f;
 
     AudioSource _source;
-    AudioClip _guide, _find, _feedback, _peek, _celebrate;
+    readonly Dictionary<VoiceCue, AudioClip> _clips = new Dictionary<VoiceCue, AudioClip>();
+    readonly VoiceArbiter _arbiter = new VoiceArbiter();
+
+    // 排队中的语音（仲裁器只存优先级，这里存对应的 cue/位置）
+    VoiceCue _queuedCue;
+    Vector3 _queuedPos;
+    bool _hasQueuedCue;
+
+    // 资源文件名映射（Resources/Voice/ 下，不带扩展名；wav/mp3 都可）
+    static readonly (VoiceCue cue, string file)[] Files =
+    {
+        (VoiceCue.GuideAppear, "voice_guide"),
+        (VoiceCue.Find,        "voice_find"),
+        (VoiceCue.Feedback,    "voice_feedback"),
+        (VoiceCue.Peek,        "voice_peek"),
+        (VoiceCue.Start,       "voice_start"),
+        (VoiceCue.Confused,    "voice_confused"),
+        (VoiceCue.Found,       "voice_found"),
+        (VoiceCue.Lead1,       "voice_lead1"),
+        (VoiceCue.Lead2,       "voice_lead2"),
+        (VoiceCue.Lead3,       "voice_lead3"),
+        (VoiceCue.Success,     "voice_success"),
+        (VoiceCue.StarChase,   "voice_star_chase"),
+        (VoiceCue.StarLead,    "voice_star_lead"),
+        (VoiceCue.StarFirst,   "voice_star_first"),
+        (VoiceCue.MeteorShower,"voice_meteor_shower"),
+        (VoiceCue.Celebrate,   "voice_celebrate"),   // 可能缺失 → 回退 meteor_shower
+        (VoiceCue.Rest,        "voice_rest"),
+        (VoiceCue.Hum,         "voice_hum"),
+        (VoiceCue.SearchStart, "voice_search_start"),
+        (VoiceCue.SearchLook,  "voice_search_look"),
+        (VoiceCue.SearchHere,  "voice_search_here"),
+        (VoiceCue.SearchAgain, "voice_search_again"),
+        (VoiceCue.SearchWhere, "voice_search_where"),
+        (VoiceCue.SearchFound, "voice_search_found"),
+    };
 
     void Awake()
     {
@@ -23,17 +68,15 @@ public class VoiceCuePlayer : MonoBehaviour
         _source.volume = volume;
         _source.spatialBlend = spatialBlend;
         _source.spatialize = spatialBlend > 0.5f;
+        _source.loop = false;
 
-        _guide = Resources.Load<AudioClip>("Voice/voice_guide");
-        _find = Resources.Load<AudioClip>("Voice/voice_find");
-        _feedback = Resources.Load<AudioClip>("Voice/voice_feedback");
-        _peek = Resources.Load<AudioClip>("Voice/voice_peek");
-        _celebrate = Resources.Load<AudioClip>("Voice/voice_celebrate");
-
-        int n = (_guide != null ? 1 : 0) + (_find != null ? 1 : 0)
-              + (_feedback != null ? 1 : 0) + (_peek != null ? 1 : 0)
-              + (_celebrate != null ? 1 : 0);
-        Debug.Log($"[Voice] 语音片段加载 {n}/5" + (n < 5 ? "（缺失的将只有音效）" : ""));
+        int n = 0;
+        foreach (var (cue, file) in Files)
+        {
+            var clip = Resources.Load<AudioClip>("Voice/" + file);
+            if (clip != null) { _clips[cue] = clip; n++; }
+        }
+        Debug.Log($"[Voice] 语音片段加载 {n}/{Files.Length}" + (n < Files.Length ? "（缺失的将静默/回退音效）" : ""));
     }
 
     /// <summary>运行时调整音量（干预档位联动）。</summary>
@@ -43,19 +86,67 @@ public class VoiceCuePlayer : MonoBehaviour
         if (_source != null) _source.volume = volume;
     }
 
-    /// <summary>播放语音；片段缺失则不响。worldPos 供空间音频定位（声音从该方位传来）。</summary>
-    public void Play(VoiceCue cue, Vector3 worldPos)
+    /// <summary>播放语音（经仲裁：可能打断低优先级 / 排队 / 被丢弃）。worldPos 供空间定位。</summary>
+    public void Play(VoiceCue cue, Vector3 worldPos, VoicePriority priority = VoicePriority.Guide)
     {
-        AudioClip clip = cue switch
-        {
-            VoiceCue.GuideAppear => _guide,
-            VoiceCue.Find => _find,
-            VoiceCue.Feedback => _feedback,
-            VoiceCue.Celebrate => _celebrate != null ? _celebrate : _feedback, // 庆典语音缺失时用反馈语音兜底
-            _ => _peek,
-        };
+        if (_source == null) return;
+        var clip = Resolve(cue);
         if (clip == null) return;
+        float now = Time.realtimeSinceStartup;
+        if (_arbiter.Request((int)priority, clip.length, now))
+        {
+            PlayNow(clip, worldPos, priority);
+        }
+        else if (_arbiter.HasQueued && !_hasQueuedCue)
+        {
+            // 排队成功（仲裁器只保留 1 条）：缓存等待
+            _queuedCue = cue;
+            _queuedPos = worldPos;
+            _hasQueuedCue = true;
+        }
+    }
+
+    /// <summary>清空排队语音（成功/庆典等关键时刻调用——避免旧的引导语音事后播出）。</summary>
+    public void ClearQueue()
+    {
+        _hasQueuedCue = false;
+        _arbiter.ClearQueue();
+    }
+
+    void Update()
+    {
+        if (_source == null) return;
+        float now = Time.realtimeSinceStartup;
+        if (_hasQueuedCue && _arbiter.TryDequeue(now, out int pr))
+        {
+            var clip = Resolve(_queuedCue);
+            _hasQueuedCue = false;
+            if (clip != null)
+            {
+                PlayNow(clip, _queuedPos, (VoicePriority)pr);
+                _arbiter.MarkPlaying(pr, clip.length, now);
+            }
+        }
+    }
+
+    void PlayNow(AudioClip clip, Vector3 worldPos, VoicePriority priority)
+    {
+        _source.Stop();                       // 单通道：打断当前
         transform.position = worldPos;
-        _source.PlayOneShot(clip);
+        _source.clip = clip;
+        _source.Play();
+    }
+
+    AudioClip Resolve(VoiceCue cue)
+    {
+        if (_clips.TryGetValue(cue, out var clip) && clip != null) return clip;
+        // 回退链：庆典系列兜底
+        if (cue == VoiceCue.Celebrate || cue == VoiceCue.MeteorShower)
+        {
+            if (_clips.TryGetValue(VoiceCue.MeteorShower, out clip)) return clip;
+            if (_clips.TryGetValue(VoiceCue.Feedback, out clip)) return clip;
+        }
+        if (_clips.TryGetValue(VoiceCue.Feedback, out clip)) return clip;
+        return null;
     }
 }

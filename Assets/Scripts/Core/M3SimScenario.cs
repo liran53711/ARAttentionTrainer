@@ -24,11 +24,12 @@ public class M3SimScenario : IM3SimInputs
     public float TotalDuration { get; private set; }
     public string CurrentPhase => _segIdx < _segs.Count ? _segs[_segIdx].name : "END";
 
-    // ── 人脸奖励桥段时间轴（harness 断言用；单位=场景秒）──
-    public float A1CenterStartSec = -1f;   // A1 持续居中开始 → 期望 +20s 达标
-    public float A2Seq3StartSec = -1f;     // A2 第三段（重建居中）开始 → 期望 +14s 达标
-    public float C1StartSec = -1f;         // C1 海报假脸居中开始 → 期望不累计不触发
-    public float C2StartSec = -1f;         // C2 老师走动开始 → 期望正常累计（+15s 出现 Hold15）
+    // ── 流星引导桥段时间轴（harness 断言用；单位=场景秒；2026-10-20）──
+    public float A1StartSec = -1f;         // A1' 持续注视开始 → 期望 +20s 集满 8 星触发流星雨
+    public float B1Seq3StartSec = -1f;     // B1' 第三段（回看）开始 → 期望 +8s 集满（累计 20s 注视）
+    public float C1StartSec = -1f;         // C1' 海报假脸居中 → 期望不落星
+    public float G1LeaveStartSec = -1f;    // G1' 老师离场 32s → 期望完整三段式+三轮+静默信号链
+    public float G2ReacquireSec = -1f;     // G2' 老师重获时刻 → 期望 2s 内跟随成功
 
     struct Seg
     {
@@ -97,50 +98,49 @@ public class M3SimScenario : IM3SimInputs
             if (round % 6 == 4)
                 Add(1.2f, true, true, true, 0.05f, $"R{round}·抖动中注视", true);
 
-            // ── 人脸奖励专用桥段（2026-10-13）──
-            //  每个桥段前先"清场 3s"（人框左移，把基础轮次残留的累计衰减到 0）→ 桥段时间轴精确确定。
+            // ── 流星引导专用桥段（2026-10-20 交互方案 v2 重写）──
+            //  每个桥段前先"星环清场"：老师离场 15.5s（>15s 触发星环清空，同时测试 Cleared）。
             if (round == 12)
             {
-                Add(3f, true, false, true, 0.03f, "A1·清场3s（累计清零）", true, -1, -1, LX, LY);
-                A1CenterStartSec = S;
-                Add(24f, true, true, true, 0.01f, "A1·正视老师·人脸持续居中（→+20s 达标庆典）", true);
-                Add(4f, true, true, true, 0.02f, "A1b·庆典余韵", true);
-                Add(3f, true, false, true, 0.03f, "A1c·移开视线", true, -1, -1, LX, LY);
+                Add(15.5f, false, false, false, 0f, "A1'·清场（星环清空）");
+                A1StartSec = S;
+                Add(24f, true, true, true, 0.01f, "A1'·持续注视（→+20s 集满 8 星·流星雨）", true);
+                // 打断矩阵测试：流星雨（+20~26s）期间老师离开 → 引导@+24.8 → 庆典必须立即结束
+                Add(8f, false, false, false, 0f, "A1'c·流星雨中老师离开（引导打断庆典）");
+                Add(4f, true, true, true, 0.02f, "A1'd·老师回来", true);
             }
             if (round == 20)
             {
-                // 虚晃一枪：清场后 16s 居中 → 离开 → 衰减 → 差 4s 不达标（里程碑 5/10/15 照发）
-                Add(3f, true, false, true, 0.03f, "B1·清场3s（累计清零）", true, -1, -1, LX, LY);
-                Add(16f, true, true, true, 0.01f, "B1·坚持16s（接近达标）", true);
-                Add(4f, true, false, true, 0.03f, "B1b·功亏一篑（环顾四周）", true, -1, -1, LX, LY);
-            }
-            if (round == 28)
-            {
-                // 中断后仍达标：清场 → 12s 居中 → 2s 脸检测丢失（衰减到 6）→ 第 3 段 +14s 处 = 20s 达标
-                Add(3f, true, false, true, 0.03f, "A2·清场3s（累计清零）", true, -1, -1, LX, LY);
-                Add(12f, true, true, true, 0.012f, "A2·第一段居中12s", true);
-                Add(2f, true, false, true, 0.03f, "A2b·眨眼丢失2s（脸检测暂丢·人还在）", false);  // faceBox=false：只有人没有脸
-                A2Seq3StartSec = S;
-                Add(16f, true, true, true, 0.012f, "A2c·重建居中（→+14s 处达标）", true);
+                // 累计语义：12s 注视（4 颗）→ 移开 4s（星星保留）→ 回看 16s → 第 3 段 +8s 集满
+                Add(15.5f, false, false, false, 0f, "B1'·清场（星环清空）");
+                Add(12f, true, true, true, 0.012f, "B1'a·注视12s（攒 4 颗）", true);
+                Add(4f, true, false, true, 0.03f, "B1'b·移开4s（星星保留·不清零）", true, -1, -1, LX, LY);
+                B1Seq3StartSec = S;
+                Add(16f, true, true, true, 0.012f, "B1'c·回看（→+8s 集满流星雨）", true);
             }
             if (round == 36)
             {
-                // C1 海报假脸：人框在画面右下（老师不在中心），但中央"检出"一张高分假脸（海报）——
-                // 归属过滤应将其挡掉：不累计、不触发（真机"16 张脸"过检场景的模拟）
-                Add(3f, true, false, true, 0.03f, "C1·清场3s（累计清零）", true, -1, -1, LX, LY);
+                // C1' 海报假脸：人框在画面右下（老师不在中心），但中央"检出"一张高分假脸（海报）——
+                // 归属过滤应将其挡掉：不落星、不触发（真机"16 张脸"过检场景的模拟）
+                Add(15.5f, false, false, false, 0f, "C1'·清场（星环清空）");
                 C1StartSec = S;
-                Add(20f, true, false, true, 0.01f, "C1·海报假脸居中20s（人框在右下→不该累计）",
+                Add(20f, true, false, true, 0.01f, "C1'·海报假脸居中20s（人框在右下→不该落星）",
                     true, 0.50f, 0.49f, 0.80f, 0.75f);
-                Add(3f, true, false, true, 0.03f, "C1b·恢复", true, -1, -1, LX, LY);
+                Add(3f, true, false, true, 0.03f, "C1'b·恢复", true, -1, -1, LX, LY);
             }
-            if (round == 44)
+            if (round == 52)
             {
-                // C2 老师走动：人框+脸同步移动（孩子注视跟随），居中保持应正常累计（15s → Hold15，未到 20s）
-                Add(3f, true, false, true, 0.03f, "C2·清场3s（累计清零）", true, -1, -1, LX, LY);
-                C2StartSec = S;
-                Add(5f, true, true, true, 0.012f, "C2a·老师走动·注视跟随（右移）", true, -1, -1, 0.61f, 0.43f);
-                Add(5f, true, true, true, 0.012f, "C2b·老师走动·注视跟随（左移）", true, -1, -1, 0.55f, 0.47f);
-                Add(5f, true, true, true, 0.012f, "C2c·老师走动·注视跟随（回中）", true);
+                // G1' 完整引导链：老师离场 45s → 疑惑→发现→带领×3（两轮强化）→ 静默。
+                // 45s 覆盖最坏起始相位（若开始时处于静默期剩余 15s，完整链仍需 ~44s）。
+                G1LeaveStartSec = S;
+                Add(45f, false, false, false, 0f, "G1'·老师离场45s（完整三段式+三轮强化+静默）");
+            }
+            if (round == 60)
+            {
+                // G2' 跟随成功：丢失 5s（引导进行中）→ 老师回来 + 注视 → 跟随成功
+                Add(5f, false, false, false, 0f, "G2'a·老师丢失5s（引导中）");
+                G2ReacquireSec = S;
+                Add(6f, true, true, true, 0.012f, "G2'b·老师回来+注视（→跟随成功）", true);
             }
             round++;
         }
@@ -156,7 +156,7 @@ public class M3SimScenario : IM3SimInputs
 
         TotalDuration = S;
         Debug.Log($"[SIM] 剧本就绪：{_segs.Count} 段 / 共 {TotalDuration / 60f:F1} 分钟 / 种子固定" +
-                  $"（A1@{A1CenterStartSec:F1}s / A2重建@{A2Seq3StartSec:F1}s / C1假脸@{C1StartSec:F1}s / C2走动@{C2StartSec:F1}s）");
+                  $"（A1'@{A1StartSec:F1}s / B1'重建@{B1Seq3StartSec:F1}s / C1'假脸@{C1StartSec:F1}s / G1离场@{G1LeaveStartSec:F1}s / G2重获@{G2ReacquireSec:F1}s）");
     }
 
     public void Tick(float dt, out List<DetectionResult> detections, out List<DetectionResult> faces,

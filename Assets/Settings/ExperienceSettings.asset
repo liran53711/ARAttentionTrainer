@@ -26,7 +26,6 @@ MonoBehaviour:
   gazeFreshnessSeconds: 0.4
   reGuideCooldownSeconds: 3
   feedbackDurationSeconds: 2
-  idleTimeoutSeconds: 10
   logSampleEverySeconds: 2
   peekIntervalSeconds: 10
   peekDurationSeconds: 0.8
@@ -35,6 +34,12 @@ MonoBehaviour:
   cueVolumeScale: 1
   micFallbackFeedbackGazeSeconds: 5
   startupAttractionSeconds: 25
+  firstSearchEnabled: 1
+  firstSearchMoveSpeed: 1.4
+  firstSearchRadius: 1.6
+  firstSearchEyeHeight: 1.2
+  firstSearchHoldSeconds: 0.4
+  firstSearchVoiceInterval: 4
   faceModelAsset: {fileID: 5022602860645237092, guid: dcee2b568a434aebbb5152ff29676040, type: 3}
   faceDetectionInterval: 0.33
   faceConfThreshold: 0.6
@@ -42,8 +47,16 @@ MonoBehaviour:
   faceCenterRadius: 0.22
   faceCenterHysteresis: 1.3
   faceFreshnessSeconds: 0.8
-  faceCelebrateSeconds: 20
-  faceHoldDecayRate: 3
-  faceCelebrateDuration: 6
-  faceCelebrateCooldownSeconds: 8
-  faceMilestoneStepSeconds: 5
+  meteorStarSeconds: 2.5
+  meteorStarsPerRing: 8
+  meteorShowerDuration: 6
+  meteorShowerCooldown: 8
+  meteorRingClearSeconds: 15
+  guideConfusedDelay: 0.8
+  guideConfusedSeconds: 1.8
+  guideFoundSeconds: 0.9
+  guideLeadSeconds: 6
+  guideLeadSecondsRound3: 8
+  guideMaxRounds: 3
+  guideSilentSeconds: 15
+  stardustPathEnabled: 1

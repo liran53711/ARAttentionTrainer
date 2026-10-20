@@ -159,7 +159,11 @@ public class IpEffects : MonoBehaviour
         sol.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.7f, 1f, 0.15f));
         var vel = _dust.velocityOverLifetime; vel.enabled = true;
         vel.space = ParticleSystemSimulationSpace.World;
+        // ★2026-10-20 修复：三轴必须显式同模式（此前只设 y，x/z 默认模式不一致 →
+        //   Unity 6.4 每帧刷屏 "Particle Velocity curves must all be in the same mode"）
+        vel.x = new ParticleSystem.MinMaxCurve(0f, 0f);
         vel.y = new ParticleSystem.MinMaxCurve(0.06f, 0.16f); // 缓慢上浮
+        vel.z = new ParticleSystem.MinMaxCurve(0f, 0f);
         var rend = go.GetComponent<ParticleSystemRenderer>();
         rend.sharedMaterial = starMat != null ? starMat : glowMat;
         rend.renderMode = ParticleSystemRenderMode.Billboard;
@@ -255,6 +259,7 @@ public class IpEffects : MonoBehaviour
         switch (_mood)
         {
             case IPWorldView.IPAnimState.Guiding:   haloTo = 0.34f + 0.10f * Mathf.Sin(now * 1.6f); break;
+            case IPWorldView.IPAnimState.Search:    haloTo = 0.40f + 0.12f * Mathf.Sin(now * 1.9f); break;
             case IPWorldView.IPAnimState.Companion: haloTo = 0.24f + 0.08f * Mathf.Sin(now * 1.1f); break;
             case IPWorldView.IPAnimState.Feedback:  haloTo = 0.6f + 0.15f * Mathf.Sin(now * 6f); break;
             case IPWorldView.IPAnimState.Appearing: haloTo = 0.5f; break;
@@ -361,6 +366,7 @@ public class IpEffects : MonoBehaviour
         {
             var em = _dust.emission;
             em.rateOverTime = _mood == IPWorldView.IPAnimState.Guiding ? 7f
+                            : _mood == IPWorldView.IPAnimState.Search ? 9f
                             : _mood == IPWorldView.IPAnimState.Appearing ? 10f
                             : _mood == IPWorldView.IPAnimState.Peek ? 5f
                             : 0f;
@@ -386,7 +392,8 @@ public class IpEffects : MonoBehaviour
                 break;
             }
             case IPWorldView.IPAnimState.Guiding:
-                my = Mathf.Sin(now * 1.6f) * 0.010f;
+            case IPWorldView.IPAnimState.Search: // 首寻漫游：更明显的飞行起伏
+                my = Mathf.Sin(now * (_mood == IPWorldView.IPAnimState.Search ? 2.4f : 1.6f)) * 0.012f;
                 break;
         }
         ModelMicroOffset = new Vector3(0f, my, 0f);

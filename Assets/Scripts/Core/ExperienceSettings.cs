@@ -73,10 +73,28 @@ public class ExperienceSettings : ScriptableObject
     [Tooltip("麦克风不可用时：注视累计满这么久直接给反馈（替代'讲话结束'条件）")]
     public float micFallbackFeedbackGazeSeconds = 5f;
 
-    [Header("开场吸引（用户定调 2026-10-10）")]
-    [Tooltip("应用启动即进入引导（精灵立即出现、带孩子四处找老师），不等讲话；" +
-             "持续到首次检测到目标或超过此时长（秒）。0=关闭")]
+    [Header("开场吸引（已废弃 2026-10-20：由首寻 3D 漫游取代）")]
+    [Tooltip("已废弃：开场不再用假讲话驱动引导；保留字段仅为旧配置兼容")]
     public float startupAttractionSeconds = 25f;
+
+    [Header("首寻 3D 漫游（第一次找到老师前，2026-10-20）")]
+    [Tooltip("开启：首次锁定老师前，精灵绕孩子 360° 真实漫游 + 空间语音吸引注意力")]
+    public bool firstSearchEnabled = true;
+
+    [Tooltip("漫游速度（米/秒）")]
+    public float firstSearchMoveSpeed = 1.4f;
+
+    [Tooltip("漫游半径（米；会按 MRUK 房间边界自动夹紧）")]
+    public float firstSearchRadius = 1.6f;
+
+    [Tooltip("无房间数据时用于估算地板高度的眼高（坐姿约1.1~1.2m；站姿约1.5~1.7m）")]
+    public float firstSearchEyeHeight = 1.2f;
+
+    [Tooltip("每个路径点停留时长（秒）")]
+    public float firstSearchHoldSeconds = 0.4f;
+
+    [Tooltip("搜索语音间隔（秒）")]
+    public float firstSearchVoiceInterval = 4f;
 
     [Header("人脸居中奖励（2026-10-13 用户定调：精准人脸检测→居中保持→跳舞庆典）")]
     [Tooltip("BlazeFace 人脸检测模型（Assets/Models/blazeface_face.onnx）")]
@@ -101,20 +119,45 @@ public class ExperienceSettings : ScriptableObject
     [Tooltip("人脸数据新鲜度：超过这个时间没有新检测结果 → 视为没在看（不累计）")]
     public float faceFreshnessSeconds = 0.8f;
 
-    [Tooltip("对脸注视保持达标秒数 → 精灵跳舞庆典（先暂定 20s，后续通过对话判决调整）")]
-    public float faceCelebrateSeconds = 20f;
+    [Header("流星引导（2026-10-20 交互方案 v2）")]
+    [Tooltip("落一颗星需要的注视秒数（8 颗×2.5s ≈ 20s 集满一圈）")]
+    public float meteorStarSeconds = 2.5f;
 
-    [Tooltip("保持中断时的衰减速率（3=每秒掉 3 秒，快速清零）")]
-    public float faceHoldDecayRate = 3f;
+    [Tooltip("一圈星星数量（集满触发流星雨 + 跳舞）")]
+    public int meteorStarsPerRing = 8;
 
-    [Tooltip("跳舞庆典动画时长（秒）")]
-    public float faceCelebrateDuration = 6f;
+    [Tooltip("流星雨 + 跳舞庆典时长（秒）")]
+    public float meteorShowerDuration = 6f;
 
-    [Tooltip("庆典后冷却（秒）：这段时间不重新累计（防连发）")]
-    public float faceCelebrateCooldownSeconds = 8f;
+    [Tooltip("流星雨后冷却（秒）：不累计新星星")]
+    public float meteorShowerCooldown = 8f;
 
-    [Tooltip("里程碑节拍（秒）：保持中每满 5s 给一次小反馈（星光脉冲）")]
-    public float faceMilestoneStepSeconds = 5f;
+    [Tooltip("老师完全离开多久后清空星环（重新开始积累）")]
+    public float meteorRingClearSeconds = 15f;
+
+    [Tooltip("老师丢失多久后精灵开始寻找（疑惑）")]
+    public float guideConfusedDelay = 0.8f;
+
+    [Tooltip("疑惑阶段时长（秒）：老师去哪里了呢？")]
+    public float guideConfusedSeconds = 1.8f;
+
+    [Tooltip("发现阶段时长（秒）：找到老师了！跟我来～")]
+    public float guideFoundSeconds = 0.9f;
+
+    [Tooltip("带领阶段时长（秒，第 1-2 轮）")]
+    public float guideLeadSeconds = 6f;
+
+    [Tooltip("带领阶段时长（秒，第 3 轮强化版）")]
+    public float guideLeadSecondsRound3 = 8f;
+
+    [Tooltip("引导强化轮数上限（三轮后静默陪伴）")]
+    public int guideMaxRounds = 3;
+
+    [Tooltip("三轮后的静默期（秒）——期间不主动引导")]
+    public float guideSilentSeconds = 15f;
+
+    [Tooltip("星尘路径开关（未注视时地面指向老师的流光带）")]
+    public bool stardustPathEnabled = true;
 
     public static readonly string[] LevelNames = { "强", "中", "弱" };
     public string CurrentLevelName => LevelNames[Mathf.Clamp(interventionLevel, 0, 2)];
