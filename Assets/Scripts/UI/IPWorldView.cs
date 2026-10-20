@@ -71,8 +71,6 @@ public class IPWorldView : MonoBehaviour
     [Header("模型接口（组员正式模型约定）")]
     [Tooltip("模型原生身高（米）——按 baseWorldSize/modelNativeHeight 归一缩放：FBX 按真实米制建模即可，不用在源文件里缩放")]
     public float modelNativeHeight = 1f;
-    [Tooltip("模型\"脚下\"距中心的偏移（米）——引导路的起点锚定用（≈世界身高的 35%）")]
-    public float modelFeetOffset = 0.16f;
 
     [Header("参数")]
     [Tooltip("估算用的人体身高（与检测框一致）")]

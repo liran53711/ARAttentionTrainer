@@ -13,7 +13,7 @@ public class M3DebugDriver : MonoBehaviour
     public ExperienceSettings settings;
     public IPDebugView ipView;          // 电脑端（OnGUI）
     public IPWorldView ipWorldView;     // 真机（世界空间）——两者二选一
-    public GuideArrow guideArrow;       // 引导箭头（PPT：视线离开老师时指路拉回）
+    public GuideArrow guideArrow;       // 引导箭头——已停用（方案改为立体声方位引导），保留备用
     public AudioCuePlayer audioPlayer;
     public VoiceCuePlayer voiceCue;     // 语音指导（真机；片段缺失时静默跳过）
     public MicVadService vadService;
@@ -77,8 +77,8 @@ public class M3DebugDriver : MonoBehaviour
     bool _everShown;
     float _lockStableT;              // 目标持续有效累计（锁定稳定性门：≥0.8s 才认"认识老师"，防虚空锁定）
     float _lostT;                    // 距上次目标有效的时长（"老师消失在视野后"计时）
-    bool _arrowShown;                // 引导路当前是否显示（供视图推送）
-    bool _prevArrowShown;            // 上升沿检测（方位提示出现的瞬间先喊一次）
+    bool _hintOn;                    // 方位提示是否激活（老师离开视野：方向性语音 + 精灵导航）
+    bool _prevHintOn;                // 上升沿检测（提示出现瞬间先喊一次）
     float _voiceRepeatT;             // 方向性语音重复节拍（立体声再定位）
     float _now;                      // 会话时钟（Tick 驱动；仿真可加速运行）
     float _lockFxCooldown;           // 重获反馈冷却（每次回来都给"找到啦"，6s 内不重复）
@@ -397,7 +397,7 @@ public class M3DebugDriver : MonoBehaviour
                     _ipPos = Vector2.Lerp(_ipPos, hint, Mathf.Clamp01(dt * 1.6f));
                 }
                 // ② 方向性语音：出现即喊（0.1s 内），此后每 3.6s 重复帮助再定位
-                if (!_prevArrowShown) _voiceRepeatT = 0.1f;
+                if (!_prevHintOn) _voiceRepeatT = 0.1f;
                 _voiceRepeatT -= dt;
                 if (_voiceRepeatT <= 0f)
                 {
@@ -409,8 +409,8 @@ public class M3DebugDriver : MonoBehaviour
                             : transform.position + transform.forward);
                 }
             }
-            _prevArrowShown = hintOn;
-            _arrowShown = hintOn;
+            _prevHintOn = hintOn;
+            _hintOn = hintOn;
         }
 
         // ── 人脸居中保持奖励（2026-10-13 用户定调）──
@@ -564,9 +564,9 @@ public class M3DebugDriver : MonoBehaviour
             ipWorldView.targetValid = snapshot.valid; // 锚定规则：有效=跟随；丢失=冻结防漂移
             ipWorldView.targetX01 = _heldTargetPos.x; // 老师独立锚点（最后已知视口坐标；路标模式精灵飞走后老师方位单独算）
             ipWorldView.targetY01 = _heldTargetPos.y;
-            ipWorldView.signpostMode = _arrowShown;   // 路标模式：老师消失 → IP 飞来当路标（目标丢失也重构锚点）
-            ipWorldView.pointing = _arrowShown;       // "找老师"动作：周期性指向手势 + 身体朝老师侧转
-            ipWorldView.faceTeacherBlend = _arrowShown ? 0.5f : 0f;
+            ipWorldView.signpostMode = _hintOn;   // 路标模式：老师消失 → IP 飞来当路标（目标丢失也重构锚点）
+            ipWorldView.pointing = _hintOn;       // "找老师"动作：周期性指向手势 + 身体朝老师侧转
+            ipWorldView.faceTeacherBlend = _hintOn ? 0.5f : 0f;
             ipWorldView.animState = (IPWorldView.IPAnimState)(int)_ipAnim; // C：动画状态转发（枚举顺序一一对应）
         }
     }
@@ -816,8 +816,8 @@ public class M3DebugDriver : MonoBehaviour
         _targetLostEdge = false;
         _targetReacquiredEdge = false;
         _lostT = 999f;
-        _arrowShown = false;
-        _prevArrowShown = false;
+        _hintOn = false;
+        _prevHintOn = false;
         _faceHold = 0f;
         _faceMilestone = 0;
         _celebrating = false;

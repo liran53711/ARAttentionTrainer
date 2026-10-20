@@ -56,7 +56,6 @@ public static class M3SimHarness
         driver.InitCore(); // 编辑器不自动跑 Start，显式初始化
 
         // ── 信号记账 ──
-        float lastFind = -99f, lastLock = -99f, lastAcquire = -99f;
         int cntFind = 0, cntLock = 0, cntFb = 0, cntGaze = 0, cntAppear = 0;
         int cntHold5 = 0, cntHold10 = 0, cntHold15 = 0;
         var celebrateTimes = new List<float>();
@@ -69,8 +68,8 @@ public static class M3SimHarness
             float now = driver.NowProbe;
             switch (kind + ":" + detail)
             {
-                case "Voice:Find": lastFind = now; cntFind++; if (lostDeadline > 0) lostDeadline = -1f; break;
-                case "Fx:Lock": lastLock = now; cntLock++; if (acquireDeadline > 0) acquireDeadline = -1f; break;
+                case "Voice:Find": cntFind++; if (lostDeadline > 0) lostDeadline = -1f; break;
+                case "Fx:Lock": cntLock++; if (acquireDeadline > 0) acquireDeadline = -1f; break;
                 case "Fx:Feedback": cntFb++; break;
                 case "Gaze:Sustained": cntGaze++; break;
                 case "Fx:Appear": cntAppear++; break;

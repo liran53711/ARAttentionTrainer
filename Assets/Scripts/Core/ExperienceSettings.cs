@@ -49,9 +49,6 @@ public class ExperienceSettings : ScriptableObject
     [Tooltip("反馈动画时长")]
     public float feedbackDurationSeconds = 2f;
 
-    [Tooltip("老师没讲话这么久 → 回待机")]
-    public float idleTimeoutSeconds = 10f;
-
     [Tooltip("训练日志采样间隔（秒）")]
     public float logSampleEverySeconds = 2f;
 
