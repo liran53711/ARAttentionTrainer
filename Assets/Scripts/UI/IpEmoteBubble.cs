@@ -25,6 +25,14 @@ public class IpEmoteBubble : MonoBehaviour
     public float bubbleSize = 0.30f;
     public float faceSize = 0.22f;
 
+    [Header("动效（2026-10-20 重构接口）")]
+    [Tooltip("优先使用序列帧动效（Resources/Effects/flipbooks/<kind>.png）；资源缺失时自动回退静态贴图")]
+    public bool preferFlipbooks = true;
+
+    // 动效运行态：存在时 bubble+face 两层静态图由一张完整动图替代（动图含气泡框+表情）
+    FlipbookEffect _bubbleFlip;
+    bool _usingFlipbook;
+
     // 状态
     enum Phase { Hidden, PopIn, Loop, FloatOut }
     Phase _phase = Phase.Hidden;
@@ -114,6 +122,21 @@ public class IpEmoteBubble : MonoBehaviour
         // 表情贴图切换（实例已缓存，不重复分配）
         if (_kind == "Hum" && _humInst != null) _faceR.sharedMaterial = _humInst;
         else if (_cheerInst != null) _faceR.sharedMaterial = _cheerInst;
+        // ★2026-10-20：优先序列帧动效（cheer/hum/curious），缺失则保持静态两层贴图
+        TryApplyFlipbook(kind);
+    }
+
+    /// <summary>动效绑定：存在则用一张完整泡泡动图替代 bubble+face 两层静态贴图。</summary>
+    void TryApplyFlipbook(string kind)
+    {
+        _usingFlipbook = false;
+        if (!preferFlipbooks) return;
+        if (!FlipbookLibrary.TryGet(kind.ToLowerInvariant(), out var info)) return;
+        if (_bubbleFlip == null) _bubbleFlip = _bubbleR.gameObject.AddComponent<FlipbookEffect>();
+        _bubbleFlip.Bind(_bubbleR, info.atlas, info.cols, info.rows, info.fps, info.loop);
+        _bubbleFlip.Play(true);
+        _usingFlipbook = true;
+        _faceR.enabled = false; // 动图已包含气泡框+表情（组员按完整画面制作）
     }
 
     public void Hide()
@@ -125,7 +148,7 @@ public class IpEmoteBubble : MonoBehaviour
     void SetAlpha(float a)
     {
         SetQuadAlpha(_bubbleR, a);
-        SetQuadAlpha(_faceR, a);
+        if (!_usingFlipbook) SetQuadAlpha(_faceR, a);
     }
 
     static void SetQuadAlpha(MeshRenderer r, float a)
@@ -217,22 +240,25 @@ public class IpEmoteBubble : MonoBehaviour
         _root.rotation = _root.rotation * Quaternion.Euler(0f, 0f, tilt);
         _bubbleR.transform.localPosition = Vector3.zero;
         _bubbleR.transform.localScale = Vector3.one * bubbleSize;
-        _faceR.transform.localPosition = new Vector3(0f, -0.005f, -0.01f);
-        _faceR.transform.localScale = Vector3.one * faceSize;
-        // 眨眼（Curious/通用）
-        if (_kind == "Curious" && _phase == Phase.Loop)
+        if (!_usingFlipbook)
         {
-            _nextBlink -= dt;
-            if (_nextBlink <= 0f) { _blinkT = 0f; _nextBlink = Random.Range(2.5f, 4.5f); }
-        }
-        if (_blinkT < 0.14f)
-        {
-            _blinkT += dt;
-            float bk = 1f - Mathf.Sin(Mathf.Clamp01(_blinkT / 0.14f) * Mathf.PI) * 0.82f;
-            _faceR.transform.localScale = new Vector3(faceSize, faceSize * bk, 1f);
+            _faceR.transform.localPosition = new Vector3(0f, -0.005f, -0.01f);
+            _faceR.transform.localScale = Vector3.one * faceSize;
+            // 眨眼（Curious/通用）——动效模式下眨眼由组员动画承担，不叠加程序化眨眼
+            if (_kind == "Curious" && _phase == Phase.Loop)
+            {
+                _nextBlink -= dt;
+                if (_nextBlink <= 0f) { _blinkT = 0f; _nextBlink = Random.Range(2.5f, 4.5f); }
+            }
+            if (_blinkT < 0.14f)
+            {
+                _blinkT += dt;
+                float bk = 1f - Mathf.Sin(Mathf.Clamp01(_blinkT / 0.14f) * Mathf.PI) * 0.82f;
+                _faceR.transform.localScale = new Vector3(faceSize, faceSize * bk, 1f);
+            }
         }
         SetQuadAlpha(_bubbleR, alpha);
-        SetQuadAlpha(_faceR, alpha);
+        if (!_usingFlipbook) SetQuadAlpha(_faceR, alpha);
 
         // ── 星光迸发（Cheer）──
         if (_kind != "Hum" && _phase == Phase.Loop)

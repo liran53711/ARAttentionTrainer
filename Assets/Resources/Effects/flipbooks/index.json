@@ -1,0 +1,11 @@
+{
+  "entries": [
+    { "name": "cheer",    "frames": 8,  "rows": 1, "fps": 14, "loop": false },
+    { "name": "hum",      "frames": 12, "rows": 1, "fps": 12, "loop": true  },
+    { "name": "curious",  "frames": 8,  "rows": 1, "fps": 12, "loop": true  },
+    { "name": "halo",     "frames": 12, "rows": 1, "fps": 12, "loop": true  },
+    { "name": "ring",     "frames": 10, "rows": 1, "fps": 14, "loop": false },
+    { "name": "celebrate","frames": 16, "rows": 4, "fps": 20, "loop": false },
+    { "name": "star",     "frames": 8,  "rows": 1, "fps": 10, "loop": true  }
+  ]
+}

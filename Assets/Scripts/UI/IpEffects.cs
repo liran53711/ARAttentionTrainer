@@ -51,6 +51,10 @@ public class IpEffects : MonoBehaviour
     void Awake() => EnsureInit();
     void Update() => Tick(Time.time, Time.deltaTime);
 
+    // ── 序列帧动效（2026-10-20 重构接口）：存在时替代"静态图+程序缩放"──
+    FlipbookEffect _haloFlip, _ringFlip;
+    bool _flipChecked;
+
     void EnsureInit()
     {
         if (_haloR != null) return;
@@ -59,6 +63,25 @@ public class IpEffects : MonoBehaviour
         for (int i = 0; i < 3; i++)
             _fly[i] = MakeQuad("Firefly" + i, starMat != null ? starMat : glowMat, out _flyR[i]);
         BuildDust();
+        EnsureFlipbooks();
+    }
+
+    /// <summary>绑定光效动效（halo 循环呼吸 / ring 脉冲单次播放）；资源缺失则保持原程序化效果。</summary>
+    void EnsureFlipbooks()
+    {
+        if (_flipChecked) return;
+        _flipChecked = true;
+        if (FlipbookLibrary.TryGet("halo", out var h))
+        {
+            _haloFlip = _halo.gameObject.AddComponent<FlipbookEffect>();
+            _haloFlip.Bind(_haloR, h.atlas, h.cols, h.rows, h.fps, h.loop);
+            _haloFlip.Play();
+        }
+        if (FlipbookLibrary.TryGet("ring", out var r))
+        {
+            _ringFlip = _ring.gameObject.AddComponent<FlipbookEffect>();
+            _ringFlip.Bind(_ringR, r.atlas, r.cols, r.rows, r.fps, r.loop);
+        }
     }
 
     IpEmoteBubble _bubble;
@@ -165,6 +188,7 @@ public class IpEffects : MonoBehaviour
     {
         _ringT = 0f;
         _ringKind = (kind == "Feedback" || kind == "Celebrate") ? 1 : 0;
+        if (_ringFlip != null) _ringFlip.Play(true); // 光环动效：从头播一遍
         if (_dust == null) return;
         switch (kind)
         {
@@ -247,8 +271,17 @@ public class IpEffects : MonoBehaviour
                 Vector3 eyePos = EyePos();
                 _halo.position = transform.position + (transform.position - eyePos).normalized * 0.06f;
                 _halo.rotation = Quaternion.LookRotation(_halo.position - eyePos, Vector3.up);
-                float hs = haloSize * (1f + 0.05f * Mathf.Sin(now * 1.6f));
-                _halo.localScale = Vector3.one * hs;
+                if (_haloFlip != null)
+                {
+                    // 动效模式：呼吸感由组员动画承载，不再叠加程序化缩放
+                    _halo.localScale = Vector3.one * haloSize;
+                    if (!_haloFlip.IsPlaying) _haloFlip.Play();
+                }
+                else
+                {
+                    float hs = haloSize * (1f + 0.05f * Mathf.Sin(now * 1.6f));
+                    _halo.localScale = Vector3.one * hs;
+                }
                 var m = _haloR.sharedMaterial;
                 if (m != null) m.SetColor("_Color", new Color(0.85f, 0.78f, 1f, _haloAlpha));
             }
@@ -278,7 +311,23 @@ public class IpEffects : MonoBehaviour
         }
 
         // ── 脉冲环 ──
-        if (_ringT < ringDuration && _ringR != null)
+        if (_ringFlip != null)
+        {
+            // 动效模式：扩散/淡出由组员动画帧承载，代码只负责定位与染色
+            _ringR.enabled = _ringFlip.IsPlaying;
+            if (_ringR.enabled)
+            {
+                Vector3 eyePos = EyePos();
+                _ring.position = transform.position;
+                _ring.rotation = Quaternion.LookRotation(_ring.position - eyePos, Vector3.up);
+                _ring.localScale = Vector3.one * ringEndSize;
+                var m = _ringR.sharedMaterial;
+                if (m != null)
+                    m.SetColor("_Color", _ringKind == 1 ? new Color(1f, 0.9f, 0.62f, 1f)
+                                                        : new Color(0.85f, 0.78f, 1f, 1f));
+            }
+        }
+        else if (_ringT < ringDuration && _ringR != null)
         {
             _ringT += dt;
             float k = Mathf.Clamp01(_ringT / ringDuration);
