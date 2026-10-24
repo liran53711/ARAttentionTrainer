@@ -192,6 +192,25 @@ public class MeteorLogicTests
     }
 
     [Test]
+    public void Guide_RetriggerCooldownAfterSuccess()
+    {
+        var g = MakeGuide();
+        Step(g, 0.85f, false, true, false);   // Confused
+        Step(g, 1.9f, false, true, false);    // Found
+        Step(g, 1.0f, false, true, false);    // Leading
+        Step(g, 1.2f, true, true, true);      // Success
+        Assert.AreEqual(GuidePhase.Success, g.Phase);
+        Assert.Greater(g.CooldownRemaining, 9f, "Success 开始即进入冷却计时");
+        Step(g, 1.6f, false, true, false);    // Success 结束 → Idle，开始冷却
+        Assert.AreEqual(GuidePhase.Idle, g.Phase);
+        var e = Step(g, 1.0f, false, true, false);
+        Assert.AreEqual(GuideEvent.None, e, "成功后 10s 冷却内不应重新引导");
+        Assert.Greater(g.CooldownRemaining, 8.5f, "冷却应在 Idle 中继续递减");
+        var e2 = Step(g, 10.0f, false, true, false);
+        Assert.AreEqual(GuideEvent.EnterConfused, e2, "冷却结束后应恢复引导");
+    }
+
+    [Test]
     public void Guide_NoTriggerWhenNeverLocked()
     {
         var g = MakeGuide();

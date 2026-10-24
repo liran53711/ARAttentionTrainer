@@ -161,6 +161,10 @@ public class StickFigureIp : MonoBehaviour
                 return new Pose { armOut = 18f, armFwd = 42f, legBack = 26f, leanX = 18f, headTilt = 0f, bobAmp = 0.010f, bobSpeed = 1.6f };
             case IPWorldView.IPAnimState.Companion: // 陪伴：放松悬浮 + 偶尔招手
                 return new Pose { armOut = 10f, armFwd = 2f, legBack = 4f, leanX = 4f, headTilt = 5f, bobAmp = 0.012f, bobSpeed = 1.1f };
+            case IPWorldView.IPAnimState.Attentive: // 注视：安静陪伴（无招手）
+                return new Pose { armOut = 8f, armFwd = 2f, legBack = 4f, leanX = 4f, headTilt = 5f, bobAmp = 0.010f, bobSpeed = 1.0f };
+            case IPWorldView.IPAnimState.Listening: // 倾听：轻微前倾/歪头（建模师 Listen 前的占位）
+                return new Pose { armOut = 10f, armFwd = 8f, legBack = 4f, leanX = 5f, headTilt = 10f, bobAmp = 0.008f, bobSpeed = 0.9f };
             case IPWorldView.IPAnimState.Feedback:  // 正反馈：欢呼（双臂高举 + 轻跳）
                 return new Pose { armOut = 150f, armFwd = 8f, legBack = 6f, leanX = -10f, headTilt = -6f, bobAmp = 0.028f, bobSpeed = 3.6f };
             case IPWorldView.IPAnimState.Peek:      // 探头：侧身探出（leanZ 侧倾）

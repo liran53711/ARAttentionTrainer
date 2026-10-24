@@ -21,6 +21,8 @@ public class GuideDirectorLogic
     /// <summary>当前强化轮次（1..MaxRounds）。</summary>
     public int Round { get; private set; } = 1;
     public float PhaseTime { get; private set; }
+    /// <summary>成功后/静默后的剩余冷却（秒）；>0 时即使丢目标也不会重新引导。</summary>
+    public float CooldownRemaining => _cooldownT;
     /// <summary>本轮带领时长（第 3 轮更长）。</summary>
     public float CurrentLeadDuration => Round >= 3 ? _leadDuration3 : _leadDuration;
 
@@ -33,13 +35,16 @@ public class GuideDirectorLogic
     readonly float _followConfirmSec;  // 跟随确认时长（1s）
     readonly float _successSec;        // 成功反馈展示时长
     readonly float _silentSec;         // 静默期时长
+    readonly float _retriggerCooldown; // v9：一轮成功/静默结束后，至少安静这么久再重新引导
 
     float _lostT;
     float _followT;
+    float _cooldownT;
 
     public GuideDirectorLogic(float lostTriggerSec = 0.8f, float confusedSec = 1.8f, float foundSec = 0.9f,
                               float leadDuration = 6f, float leadDuration3 = 8f, int maxRounds = 3,
-                              float followConfirmSec = 1f, float successSec = 1.5f, float silentSec = 15f)
+                              float followConfirmSec = 1f, float successSec = 1.5f, float silentSec = 15f,
+                              float retriggerCooldownSec = 10f)
     {
         _lostTriggerSec = Mathf.Max(0.1f, lostTriggerSec);
         _confusedSec = Mathf.Max(0.1f, confusedSec);
@@ -50,6 +55,7 @@ public class GuideDirectorLogic
         _followConfirmSec = Mathf.Max(0.1f, followConfirmSec);
         _successSec = Mathf.Max(0.2f, successSec);
         _silentSec = Mathf.Max(1f, silentSec);
+        _retriggerCooldown = Mathf.Max(0f, retriggerCooldownSec);
     }
 
     public void Reset()
@@ -59,6 +65,7 @@ public class GuideDirectorLogic
         PhaseTime = 0f;
         _lostT = 0f;
         _followT = 0f;
+        _cooldownT = 0f;
     }
 
     /// <summary>每帧推进。
@@ -70,6 +77,13 @@ public class GuideDirectorLogic
         switch (Phase)
         {
             case GuidePhase.Idle:
+                // v9（2026-10-24）：成功后至少安静 _retriggerCooldown 秒，避免短暂移开就重新引导、语音过密
+                if (_cooldownT > 0f)
+                {
+                    _cooldownT = Mathf.Max(0f, _cooldownT - dt);
+                    _lostT = targetValid ? 0f : _lostT + dt;
+                    return GuideEvent.None;
+                }
                 _lostT = targetValid ? 0f : _lostT + dt;
                 if (everLocked && !targetValid && _lostT >= _lostTriggerSec)
                 {
@@ -119,5 +133,8 @@ public class GuideDirectorLogic
         Phase = p;
         PhaseTime = 0f;
         if (p == GuidePhase.Leading) _followT = 0f;
+        // 成功/静默结束后进入 Idle 时开始冷却（这里只打标记；冷却在 Idle 分支递减）
+        if (p == GuidePhase.Success || p == GuidePhase.Silent)
+            _cooldownT = _retriggerCooldown;
     }
 }

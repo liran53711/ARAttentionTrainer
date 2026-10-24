@@ -52,11 +52,14 @@ MonoBehaviour:
   meteorShowerDuration: 6
   meteorShowerCooldown: 8
   meteorRingClearSeconds: 15
-  guideConfusedDelay: 0.8
+  guideConfusedDelay: 1.5
   guideConfusedSeconds: 1.8
   guideFoundSeconds: 0.9
   guideLeadSeconds: 6
   guideLeadSecondsRound3: 8
   guideMaxRounds: 3
   guideSilentSeconds: 15
+  guideRetriggerCooldownSeconds: 10
+  conversationResumeSeconds: 0.5
+  selfAudioTailSeconds: 0.3
   stardustPathEnabled: 1

@@ -20,7 +20,9 @@ public class MeteorSystem : MonoBehaviour
 
     [Header("星环")]
     public int ringCount = 8;
-    public float ringRadius = 0.35f;
+    public float ringRadius = 0.42f;
+    [Tooltip("进度星环单颗尺寸（米）——2026-10-24 用户实测偏小，0.16→0.24")]
+    public float ringStarSize = 0.24f;
     [Tooltip("星环位置平滑时间（老师移动/转头时星星滑过去）")]
     public float ringSmoothTime = 0.25f;
 
@@ -88,7 +90,7 @@ public class MeteorSystem : MonoBehaviour
         {
             var go = new GameObject("RingStar" + i);
             go.transform.SetParent(transform, false);
-            var r = MakeQuad(go.transform, 0.16f);
+            var r = MakeQuad(go.transform, ringStarSize);
             _ringR[i] = r;
             _ring[i] = go.transform;
             go.SetActive(false);
@@ -189,7 +191,7 @@ public class MeteorSystem : MonoBehaviour
     System.Collections.IEnumerator BurstStar(Transform t, MeshRenderer r)
     {
         float time = 0f;
-        Vector3 baseScale = Vector3.one * 0.16f;
+        Vector3 baseScale = Vector3.one * ringStarSize;
         while (time < 0.8f && t != null && r != null)
         {
             time += Time.deltaTime;
@@ -242,7 +244,7 @@ public class MeteorSystem : MonoBehaviour
                 if (eye != null && _ring[i].gameObject.activeSelf)
                     _ring[i].rotation = Quaternion.LookRotation(_ring[i].position - eye.position, Vector3.up);
                 float tw = 0.75f + 0.25f * Mathf.Sin(now * 5f + i * 1.3f);
-                _ring[i].localScale = Vector3.one * (0.16f * tw);
+                _ring[i].localScale = Vector3.one * (ringStarSize * tw);
                 if (_ringR[i] != null && _ringR[i].sharedMaterial != null)
                     _ringR[i].sharedMaterial.SetColor("_Color", new Color(1f, 0.93f, 0.65f, 0.55f + 0.45f * tw));
             }

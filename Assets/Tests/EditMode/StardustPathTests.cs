@@ -108,8 +108,21 @@ public class StardustPathTests
             "很短的星路不能保持 1m 宽，否则会变成一团星星");
         Assert.AreEqual(0.5f, StardustPath.RoadHalfWidthFor(5f, 0.5f), 1e-3f,
             "长星路保持设定路宽");
+        Assert.AreEqual(0.20f, StardustPath.RoadHalfWidthFor(2f, 0.28f), 0.01f,
+            "2m 路应约为 0.10×长度，而不是固定 0.28");
         Assert.GreaterOrEqual(StardustPath.RoadHalfWidthFor(0.01f, 0.5f), 0.05f,
             "再短也保留最小可见宽度");
+    }
+
+    [Test]
+    public void DebugSnapshot_ContainsGeometryFields()
+    {
+        var s = StardustPath.FormatSnapshot(
+            new Vector3(0f, 1f, 1f), new Vector3(0f, 0f, 3f), new Vector3(0f, 1f, 3f),
+            new Vector3(0f, 1.6f, 0f), Vector3.forward, 0f, 0.25f, 150);
+        StringAssert.Contains("len=", s);
+        StringAssert.Contains("width=0.25", s);
+        StringAssert.Contains("angle=", s);
     }
 
     [Test]

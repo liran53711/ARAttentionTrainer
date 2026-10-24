@@ -4,7 +4,8 @@
 // 以 1/30s 步长把 20+ 分钟剧本"瞬间"跑完，检查：
 //   I1 稳定性：全程无异常
 //   I2 陪伴不隐形：精灵出现后 alpha ≥ 0.18（"绝对禁止消失"）
-//   I3 转开提示：每次"稳定锁定后丢失"须在 1.4s 内发出引导语音（Guide:Confused → Voice:Find）
+//   I3 转开提示：看开视线且引导 Idle → 外界静默后 2.3s 内须实际播放语音（Voice:Played；
+//      外界讲话期间门控延后；讲话中播放数必须为 0）
 //   I4 转回反馈：每次"离开 ≥4s 后重获"须在 1.5s 内给出 Fx:Lock
 //   I5 反馈链路计数：Fx:Feedback / Gaze:Sustained / Voice:Find 达到剧本预期量级
 //   I6 流星引导体系（2026-10-20）：
@@ -57,6 +58,7 @@ public static class M3SimHarness
         int cntFind = 0, cntLock = 0, cntFb = 0, cntGaze = 0, cntAppear = 0;
         int cntDrop = 0, cntShower = 0, cntCleared = 0, cntSuccess = 0, cntSilent = 0;
         int cntSearchStart = 0, cntSearchVoice = 0, cntSearchEnd = 0, searchVoicesAfterEnd = 0;
+        int cntPlayed = 0, cntBlocked = 0, playedDuringSpeech = 0;
         float firstAcquireAt = -1f, searchEndAt = -1f;
         var showerTimes = new List<float>();
         var successTimes = new List<float>();
@@ -64,13 +66,20 @@ public static class M3SimHarness
         float gazeDeadline = -1f, acquireDeadline = -1f;
         float lastLostAt = -99f;
         bool prevLooking = true;
+        bool gazePending = false;
 
         driver.OnSignal += (kind, detail) =>
         {
             float now = driver.NowProbe;
             switch (kind + ":" + detail)
             {
-                case "Voice:Find": cntFind++; if (gazeDeadline > 0) gazeDeadline = -1f; break;
+                case "Voice:Find": cntFind++; break;
+                case "Voice:Played":
+                    cntPlayed++;
+                    if (driver.SpeakingProbe) playedDuringSpeech++;
+                    if (gazeDeadline > 0) gazeDeadline = -1f;
+                    break;
+                case "Voice:Blocked": cntBlocked++; break;
                 case "Fx:Lock": cntLock++; if (acquireDeadline > 0) acquireDeadline = -1f; break;
                 case "Fx:Feedback": cntFb++; break;
                 case "Gaze:Sustained": cntGaze++; break;
@@ -109,6 +118,7 @@ public static class M3SimHarness
         float celebrateAccum = 0f;
         float celebrateRun = 0f;
         float celebrateAlphaMin = 1f;
+        int attentiveTicks = 0;
         bool guideWasActive = false;          // 引导激活跟踪（打断矩阵断言）
         float guideActiveSince = -1f;
         bool guideInterruptReported = false;
@@ -160,6 +170,11 @@ public static class M3SimHarness
                 }
             }
 
+            // 2026-10-24：注视期应进入 Attentive/Listening（IdleFly），不能再停留在 Companion（挥手）
+            if (now > 20f && driver.LookingProbe && driver.GuidePhaseProbe == 0
+                && (driver.IpAnimProbe == 7 || driver.IpAnimProbe == 8))
+                attentiveTicks++;
+
             // C1 窗口：窗口开始后记录 Drop 快照，窗口结束时比对（假脸不应落星）
             if (!c1Armed && scenario.C1StartSec > 0f && now >= scenario.C1StartSec)
             {
@@ -179,18 +194,31 @@ public static class M3SimHarness
             if (jump > 0.12f) ipJumpCnt++;
             prevIp = ipNow;
 
-            // I3（2026-10-21 改口径）：看开视线（引导处于 Idle）后 1.4s 内须有 Voice:Find。
-            // 不再等 TargetLost——老师可能仍在相机广角内（真机实测会拖 14s）。
-            // 三轮后的静默期（Silent）是刻意不说话，不强制。
+            // I3（v9）：看开视线且引导 Idle → 等外界讲话结束（对话门控）后 2.3s 内须有
+            // 实际播放的语音（Voice:Played；Voice:Find 只是兼容信号，可能被门控拦住）。
             bool lookingNow = driver.LookingProbe;
-            if (prevLooking && !lookingNow && now > 8f && driver.GuidePhaseProbe == 0)
-                gazeDeadline = now + 1.4f;
+            bool speakingNow = driver.SpeakingProbe;
+            // 成功后 guideRetriggerCooldown 秒内是刻意的安静期，不要求这么快再出语音。
+            if (prevLooking && !lookingNow && now > 8f && driver.GuidePhaseProbe == 0
+                && driver.GuideCooldownProbe <= 0f)
+            {
+                if (!speakingNow) gazeDeadline = now + 2.3f;
+                else gazePending = true;
+            }
+            if (gazePending && !speakingNow)
+            {
+                // 讲话期间引导若已经自己启动，语音会走挂起重播/带领重复节拍，不再单独计时；
+                // 只有"讲话结束时引导仍 Idle"才要求它马上开口。
+                if (driver.GuidePhaseProbe == 0 && driver.GuideCooldownProbe <= 0f)
+                    gazeDeadline = now + 2.3f;
+                gazePending = false;
+            }
             prevLooking = lookingNow;
 
             // I4 截止判定
             if (gazeDeadline > 0 && now > gazeDeadline)
             {
-                violations.Add($"[无引导语音] t={now:F1}s 看开视线后 1.4s 未见 Voice:Find");
+                violations.Add($"[无引导语音] t={now:F1}s 看开视线（含外界静默）后 2.3s 未播放语音");
                 gazeDeadline = -1f;
             }
             if (acquireDeadline > 0 && now > acquireDeadline)
@@ -205,6 +233,12 @@ public static class M3SimHarness
         if (cntFind < expFind) violations.Add($"[计数] Voice:Find={cntFind} < {expFind}");
         if (cntLock < expLock) violations.Add($"[计数] Fx:Lock={cntLock} < {expLock}");
         if (cntFb < expFb) violations.Add($"[计数] Fx:Feedback={cntFb} < {expFb}");
+
+        // I3b 对话门控：外界讲话期间一律不得实际播放语音（Voice:Played）；静默时仍须有语音
+        if (playedDuringSpeech > 0)
+            violations.Add($"[门控] 外界讲话期间播放了 {playedDuringSpeech} 条语音（应全部延后）");
+        if (cntPlayed < 3)
+            violations.Add($"[门控] Voice:Played={cntPlayed} < 3（静默期应有语音，不能全被门控吞掉）");
 
         // ── I6 流星引导断言 ──
         // A1'：持续注视 → +20s 集满
@@ -233,7 +267,7 @@ public static class M3SimHarness
             // 实际序列：RoundUp 后进入下一轮 Confused（疑惑文案不重复播，直接从"发现"重演）
             string[] pattern = { "Confused", "Found", "Lead1", "RoundUp", "Found", "Lead2", "RoundUp", "Found", "Lead3", "Silent" };
             int pi = 0;
-            const float G1Window = 46f;
+            const float G1Window = 70f;   // v9：静默后冷却 10s 使最坏链长约 53s
             foreach (var ev in guideEvents)
             {
                 if (ev.t < scenario.G1LeaveStartSec || ev.t > scenario.G1LeaveStartSec + G1Window) continue;
@@ -266,10 +300,17 @@ public static class M3SimHarness
         if (searchVoicesAfterEnd > 0)
             violations.Add($"[首寻] 搜索结束后仍播了 {searchVoicesAfterEnd} 句搜索语音");
 
+        // 2026-10-24：注视期安静陪伴（Attentive/Listening = IdleFly）
+        if (attentiveTicks < 10)
+            violations.Add($"[注视状态] 注视期 Attentive/Listening 仅 {attentiveTicks} tick（应在 IdleFly 安静陪伴，不再 CompanionIdle 挥手）");
+
         Debug.Log($"[SIM] ⏱ {scenario.TotalDuration / 60f:F1} 分钟剧本 / {ticks} tick / 实跑 {sw.Elapsed.TotalSeconds:F1}s");
         Debug.Log($"[SIM] 计数 Voice:Find={cntFind} Fx:Lock={cntLock} Fx:Feedback={cntFb} Gaze:Sustained={cntGaze} Fx:Appear={cntAppear}");
+        Debug.Log($"[SIM] 语音门控：Played={cntPlayed} Blocked={cntBlocked} 讲话中播放={playedDuringSpeech}");
+        int cntConfused = guideEvents.FindAll(e => e.kind == "Confused").Count;
         Debug.Log($"[SIM] 流星：Drop={cntDrop} Shower={cntShower} [{string.Join(", ", showerTimes.ConvertAll(t => t.ToString("F1")))}] " +
-                  $"Cleared={cntCleared} 引导Success={cntSuccess} Silent={cntSilent} 流星雨alphaMin={celebrateAlphaMin:F2}");
+                  $"Cleared={cntCleared} 引导Success={cntSuccess} Silent={cntSilent} 引导Confused={cntConfused} " +
+                  $"流星雨alphaMin={celebrateAlphaMin:F2}");
         Debug.Log($"[SIM] 首寻：Start={cntSearchStart} Voice={cntSearchVoice} End={cntSearchEnd} " +
                   $"首次锁定={firstAcquireAt:F1}s 搜索结束={searchEndAt:F1}s 结束后语音={searchVoicesAfterEnd}");
         Debug.Log($"[SIM] I7视觉跳变（诊断）：单帧最大 {ipJumpMax:F3}，>0.12 共 {ipJumpCnt} 次（{ipJumpCnt / (scenario.TotalDuration / 60f):F1}/分钟）");

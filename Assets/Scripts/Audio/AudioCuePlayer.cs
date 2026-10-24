@@ -15,6 +15,8 @@ public class AudioCuePlayer : MonoBehaviour
     [Range(0f, 1f)] public float spatialBlend = 0f;
 
     AudioSource _source;
+    /// <summary>音效是否正在播放（对话门控的自音频输入）。</summary>
+    public bool IsPlaying => _source != null && _source.isPlaying;
     AudioClip _guide, _hide, _feedback, _celebrate;
     AudioClip _whoosh, _showerBass, _showerArp;
     AudioClip[] _chimes; // 8 个音阶

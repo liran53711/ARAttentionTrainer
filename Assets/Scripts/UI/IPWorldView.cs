@@ -18,7 +18,11 @@ using UnityEngine;
 public class IPWorldView : MonoBehaviour
 {
     /// <summary>C 项：驱动层推送的动画状态（与 M3DebugDriver.IpAnim 顺序一一对应）。</summary>
-    public enum IPAnimState { Hidden = 0, Appearing = 1, Guiding = 2, Companion = 3, Feedback = 4, Peek = 5, Search = 6 }
+    public enum IPAnimState
+    {
+        Hidden = 0, Appearing = 1, Guiding = 2, Companion = 3, Feedback = 4, Peek = 5, Search = 6,
+        Attentive = 7, Listening = 8
+    }
     public IPAnimState animState;
     [Header("引用")]
     public PcaFrameSource frameSource;
@@ -552,7 +556,8 @@ public class IPWorldView : MonoBehaviour
         bool transient = want == IPAnimState.Hidden || _visualAnim == IPAnimState.Hidden
                       || want == IPAnimState.Appearing || _visualAnim == IPAnimState.Appearing
                       || want == IPAnimState.Feedback || _visualAnim == IPAnimState.Feedback
-                      || want == IPAnimState.Peek || _visualAnim == IPAnimState.Peek;
+                      || want == IPAnimState.Peek || _visualAnim == IPAnimState.Peek
+                      || want == IPAnimState.Listening || _visualAnim == IPAnimState.Listening;
         if (transient) { _pendingAnimT = 0f; _visualAnim = want; return _visualAnim; }
         if (want != _pendingAnim) { _pendingAnim = want; _pendingAnimT = 0f; }
         _pendingAnimT += Time.deltaTime;
@@ -574,12 +579,18 @@ public class IPWorldView : MonoBehaviour
             _fx.SetMood(visual);
             if (visual == IPAnimState.Appearing) _fx.Pulse("Appear");
             if (visual == IPAnimState.Feedback) _fx.Pulse("Feedback");
-            if (visual == IPAnimState.Companion && prev == IPAnimState.Guiding) _fx.Pulse("Achieve"); // 注视达成
+            if ((visual == IPAnimState.Companion || visual == IPAnimState.Attentive
+                 || visual == IPAnimState.Listening) && prev == IPAnimState.Guiding)
+                _fx.Pulse("Achieve"); // 注视达成
         }
         if (animator != null)
         {
             animator.SetBool("Guiding", visual == IPAnimState.Guiding || visual == IPAnimState.Search);
             animator.SetBool("Companion", visual == IPAnimState.Companion);
+            // 2026-10-24：注视/倾听态用 IdleFly（不带 CompanionIdle 的右臂挥手）；
+            // 建模师 Listen 动作到位后，Task 7 再把它换成 Listening 状态。
+            if (visual == IPAnimState.Attentive || visual == IPAnimState.Listening)
+                animator.CrossFadeInFixedTime("IdleFly", 0.18f);
             switch (visual)
             {
                 case IPAnimState.Appearing: animator.SetTrigger("Appear"); break;
@@ -600,6 +611,8 @@ public class IPWorldView : MonoBehaviour
             case IPAnimState.Appearing: want = "Surprised"; break;
             case IPAnimState.Guiding:   want = "Curious"; break;   // 引导=好奇张望
             case IPAnimState.Search:    want = "Curious"; break;   // 首寻漫游=好奇找人
+            case IPAnimState.Attentive:  want = "Smile"; break;    // 注视=安静陪伴
+            case IPAnimState.Listening:  want = "Curious"; break;  // 倾听=好奇/歪头
             case IPAnimState.Feedback:  want = "Encourage"; break; // 正反馈=鼓励笑
             case IPAnimState.Peek:      want = "Curious"; break;   // 探头=好奇
             default:                    want = "Smile"; break;     // 陪伴/待机

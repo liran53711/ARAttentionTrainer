@@ -27,10 +27,21 @@ public class VoiceCuePlayer : MonoBehaviour
     readonly Dictionary<VoiceCue, AudioClip> _clips = new Dictionary<VoiceCue, AudioClip>();
     readonly VoiceArbiter _arbiter = new VoiceArbiter();
 
+    /// <summary>当前是否正在播放语音（对话门控的"自音频"输入）。</summary>
+    public bool IsPlaying => _source != null && _source.isPlaying;
+
     // 排队中的语音（仲裁器只存优先级，这里存对应的 cue/位置）
     VoiceCue _queuedCue;
     Vector3 _queuedPos;
     bool _hasQueuedCue;
+
+    // 对话门控：外界讲话期间挂起一条（Critical/Guide），静默后最多补播 2s 内的一条
+    bool _gateBlocked;
+    VoiceCue _gatedCue;
+    Vector3 _gatedPos;
+    int _gatedPriority;
+    float _gatedAt;
+    bool _hasGated;
 
     // 资源文件名映射（Resources/Voice/ 下，不带扩展名；wav/mp3 都可）
     static readonly (VoiceCue cue, string file)[] Files =
@@ -92,6 +103,17 @@ public class VoiceCuePlayer : MonoBehaviour
         if (_source == null) return;
         var clip = Resolve(cue);
         if (clip == null) return;
+        if (_gateBlocked)
+        {
+            // 外界讲话中：氛围语音直接丢；Critical/Guide 只挂起最新一条，静默后补播
+            if (priority == VoicePriority.Ambient) return;
+            _gatedCue = cue;
+            _gatedPos = worldPos;
+            _gatedPriority = (int)priority;
+            _gatedAt = Time.realtimeSinceStartup;
+            _hasGated = true;
+            return;
+        }
         float now = Time.realtimeSinceStartup;
         if (_arbiter.Request((int)priority, clip.length, now))
         {
@@ -106,10 +128,32 @@ public class VoiceCuePlayer : MonoBehaviour
         }
     }
 
+    /// <summary>对话门控：外界讲话时 allowed=false（挂起 Critical/Guide，丢 Ambient）；
+    /// 静默恢复时补播 2 秒内挂起的一条。</summary>
+    public void SetGateAllowed(bool allowed)
+    {
+        if (!allowed)
+        {
+            _gateBlocked = true;
+            return;
+        }
+        _gateBlocked = false;
+        if (_hasGated && Time.realtimeSinceStartup - _gatedAt <= 2f)
+        {
+            var cue = _gatedCue;
+            var pos = _gatedPos;
+            var pr = _gatedPriority;
+            _hasGated = false;
+            Play(cue, pos, (VoicePriority)pr);
+        }
+        else _hasGated = false;
+    }
+
     /// <summary>清空排队语音（成功/庆典等关键时刻调用——避免旧的引导语音事后播出）。</summary>
     public void ClearQueue()
     {
         _hasQueuedCue = false;
+        _hasGated = false;
         _arbiter.ClearQueue();
     }
 

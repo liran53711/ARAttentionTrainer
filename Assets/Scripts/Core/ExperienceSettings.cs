@@ -135,8 +135,8 @@ public class ExperienceSettings : ScriptableObject
     [Tooltip("老师完全离开多久后清空星环（重新开始积累）")]
     public float meteorRingClearSeconds = 15f;
 
-    [Tooltip("老师丢失多久后精灵开始寻找（疑惑）")]
-    public float guideConfusedDelay = 0.8f;
+    [Tooltip("老师丢失/孩子移开视线多久后精灵开始寻找（疑惑）——v9 从 0.8s 放宽到 1.5s，减少话痨")]
+    public float guideConfusedDelay = 1.5f;
 
     [Tooltip("疑惑阶段时长（秒）：老师去哪里了呢？")]
     public float guideConfusedSeconds = 1.8f;
@@ -155,6 +155,16 @@ public class ExperienceSettings : ScriptableObject
 
     [Tooltip("三轮后的静默期（秒）——期间不主动引导")]
     public float guideSilentSeconds = 15f;
+
+    [Tooltip("成功/静默结束后至少安静多久（秒）再重新引导——v9 降低语音密度")]
+    public float guideRetriggerCooldownSeconds = 10f;
+
+    [Header("对话门控（v9）")]
+    [Tooltip("外界讲话结束后静默多久才恢复精灵语音（秒）")]
+    public float conversationResumeSeconds = 0.5f;
+
+    [Tooltip("系统自己的 TTS/音效播放完后，继续忽略 VAD 的尾巴（秒），防止麦克风自听")]
+    public float selfAudioTailSeconds = 0.3f;
 
     [Tooltip("星尘路径开关（未注视时地面指向老师的流光带）")]
     public bool stardustPathEnabled = true;

@@ -9,6 +9,7 @@
 |---|---|---|
 | `specs/2026-10-07-ar-attention-design.md` | **总体设计文档**：交互逻辑、技术选型、参数含义（项目的"为什么"都在这） | 所有人 |
 | `specs/2026-10-10-ip-3d-model-requirements.md` | 精灵 3D 模型的交付要求（格式/动画/表情规范） | 美术 |
+| `specs/2026-10-24-listen-animation-requirements.md` | 精灵新动作 `Listen`（扶耳倾听）制作需求（v9） | 美术 |
 | `specs/2026-10-20-flipbook-effects-requirements.md` | **表情泡泡/光效动效资源需求**（序列帧规格 + 文件放置位置） | 美术必读 |
 | `plans/` | 里程碑实施计划：每个阶段做什么、做到什么算完成 | 开发 |
 | `measurements/` | 真机/电脑的实测记录（帧率、耗时、发现的问题） | 开发/测试 |

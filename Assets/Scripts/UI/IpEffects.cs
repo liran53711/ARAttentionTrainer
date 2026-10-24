@@ -54,6 +54,17 @@ public class IpEffects : MonoBehaviour
     // ── 序列帧动效（2026-10-20 重构接口）：存在时替代"静态图+程序缩放"──
     FlipbookEffect _haloFlip, _ringFlip;
     bool _flipChecked;
+    // 2026-10-24：celebrate 烟花（资产早已交付，但此前没有任何代码调用）
+    Transform _celebrate;
+    MeshRenderer _celebrateR;
+    FlipbookEffect _celebrateFlip;
+    float _nextCelebBurst;
+
+    /// <summary>celebrate 烟花是否正在播放（测试探针）。</summary>
+    public bool CelebratePlaying => _celebrateFlip != null && _celebrateFlip.IsPlaying;
+
+    /// <summary>测试/预览：确保初始化完成（Awake 在 EditMode 下可能未触发）。</summary>
+    public void EnsureForTest() => EnsureInit();
 
     void EnsureInit()
     {
@@ -82,6 +93,21 @@ public class IpEffects : MonoBehaviour
             _ringFlip = _ring.gameObject.AddComponent<FlipbookEffect>();
             _ringFlip.Bind(_ringR, r.atlas, r.cols, r.rows, r.fps, r.loop);
         }
+        EnsureCelebrateFlipbook();
+    }
+
+    /// <summary>celebrate 烟花：16 帧 4×4、20fps、单次；庆典期间每 0.9s 重启一次形成连续爆发。</summary>
+    void EnsureCelebrateFlipbook()
+    {
+        if (_celebrate != null) return;
+        _celebrate = MakeQuad("Celebrate", starMat != null ? starMat : glowMat, out _celebrateR);
+        if (FlipbookLibrary.TryGet("celebrate", out var c))
+        {
+            _celebrateFlip = _celebrate.gameObject.AddComponent<FlipbookEffect>();
+            _celebrateFlip.Bind(_celebrateR, c.atlas, c.cols, c.rows, c.fps, c.loop);
+            _celebrateFlip.Stop();
+        }
+        _celebrateR.enabled = false;
     }
 
     IpEmoteBubble _bubble;
@@ -175,6 +201,9 @@ public class IpEffects : MonoBehaviour
     /// <summary>状态切换（由 IPWorldView 驱动）。</summary>
     public void SetMood(IPWorldView.IPAnimState s)
     {
+        // 注视/倾听态复用陪伴情绪（柔光/萤火虫），不触发任何挥手或自主动作
+        if (s == IPWorldView.IPAnimState.Attentive || s == IPWorldView.IPAnimState.Listening)
+            s = IPWorldView.IPAnimState.Companion;
         if (_mood == s) return;
         var prev = _mood;
         _mood = s;
@@ -193,6 +222,22 @@ public class IpEffects : MonoBehaviour
         _ringT = 0f;
         _ringKind = (kind == "Feedback" || kind == "Celebrate") ? 1 : 0;
         if (_ringFlip != null) _ringFlip.Play(true); // 光环动效：从头播一遍
+
+        // v9（2026-10-24）：celebrate 烟花真正接入（此前资产交付但从未被调用）
+        if (kind == "Celebrate")
+        {
+            EnsureCelebrateFlipbook();
+            if (_celebrateFlip != null && Time.time >= _nextCelebBurst)
+            {
+                _nextCelebBurst = Time.time + 0.9f;
+                Vector3 eyePos = EyePos();
+                _celebrate.position = transform.position + Vector3.up * 0.15f;
+                _celebrate.rotation = Quaternion.LookRotation(_celebrate.position - eyePos, Vector3.up);
+                _celebrate.localScale = Vector3.one * 1.15f;
+                _celebrateR.enabled = true;
+                _celebrateFlip.Play(true);
+            }
+        }
         if (_dust == null) return;
         switch (kind)
         {

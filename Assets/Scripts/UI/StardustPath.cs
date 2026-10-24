@@ -34,16 +34,26 @@ public class StardustPath : MonoBehaviour
     public int starDots = 150;
     [Tooltip("星点基准尺寸（米）")]
     public float starDotSize = 0.10f;
-    [Tooltip("星点偏离路径中心的横向散布半宽（米）——路面宽度")]
-    public float roadHalfWidth = 0.50f;
+    [Tooltip("路面最大半宽（米）——实际半宽还会随路长收缩")]
+    public float roadHalfWidth = 0.28f;
+    [Tooltip("中心线星点占比（0~1）：越高方向感越强")]
+    [Range(0f, 0.8f)] public float centerlineFraction = 0.60f;
+    [Tooltip("终点宽度相对起点的比例（锥形收窄）")]
+    [Range(0.2f, 1f)] public float taper = 0.62f;
+
+    [Header("指路彗星")]
+    [Tooltip("彗星沿路飞行的速度（归一化/秒）")]
+    public float cometSpeed = 0.55f;
+    [Tooltip("彗星尺寸（米）")]
+    public float cometSize = 0.30f;
 
     [Header("节奏")]
     [Tooltip("端点/控制点重算间隔（秒）——孩子走动/老师移动时保持正确")]
     public float updateInterval = 0.1f;
     [Tooltip("控制点平滑时间（秒）")]
     public float smoothTime = 0.18f;
-    [Tooltip("星点沿路向老师方向缓慢流动的速度（归一化/秒）")]
-    public float flowSpeed = 0.06f;
+    [Tooltip("中心线星点沿路向老师方向流动的速度（归一化/秒）")]
+    public float flowSpeed = 0.20f;
 
     const int MaxDots = 192;      // 120 路径星 + 6 终点星，留余量
     const int BeaconDots = 6;     // 终点星星柱（老师身侧）
@@ -64,12 +74,17 @@ public class StardustPath : MonoBehaviour
     Transform[] _dots;
     MeshRenderer[] _dotR;
     MaterialPropertyBlock _mpb;
+    Transform _comet;
+    MeshRenderer _cometR;
+    Material _cometMat;
+    float _cometT;
 
     // 每颗星的确定性伪随机参数（构建时生成，运行时不变）
     float[] _jSide, _jUp, _sMul, _phase, _pick;
 
     // 最近一次的几何（诊断用）
     Vector3 _diagStart, _diagEnd, _diagTeacher;
+    float _diagFloorY, _lastHalfWidth;
 
     void Awake()
     {
@@ -113,6 +128,20 @@ public class StardustPath : MonoBehaviour
             _phase[i] = Hash01(i * 93.989f + 7.7f) * Mathf.PI * 2f;
             _pick[i] = Hash01(i * 53.717f + 5.5f);
         }
+
+        // 指路彗星：一颗更亮的大星沿中心线飞向老师，给星路一个明确方向
+        var comet = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        comet.name = "GuideComet";
+        comet.transform.SetParent(transform, false);
+        Destroy(comet.GetComponent<Collider>());
+        _comet = comet.transform;
+        _cometR = comet.GetComponent<MeshRenderer>();
+        _cometMat = new Material(shared);
+        _cometMat.SetColor("_Color", new Color(1f, 0.96f, 0.78f, 1f));
+        _cometR.sharedMaterial = _cometMat;
+        _cometR.shadowCastingMode = ShadowCastingMode.Off;
+        _cometR.receiveShadows = false;
+        _cometR.enabled = false;
     }
 
     /// <summary>开/关星路（驱动层在"引导激活且老师不可见"时打开）。</summary>
@@ -125,11 +154,13 @@ public class StardustPath : MonoBehaviour
         {
             _hasSmooth = false;      // 重新出现：直接对齐，不做跨屏滑移
             _nextCalc = 0f;
+            _cometT = 0f;
         }
         else
         {
             for (int i = 0; i < MaxDots; i++)
                 if (_dotR[i] != null) _dotR[i].enabled = false;
+            if (_cometR != null) _cometR.enabled = false;
         }
     }
 
@@ -174,35 +205,57 @@ public class StardustPath : MonoBehaviour
             }
         }
 
-        // ── 星点沿路铺满 + 缓慢流动 + 闪烁 ──
+        // ── 星点：中心线（暖金、密）+ 两侧（淡紫、锥形宽度）──
         _flow = Mathf.Repeat(_flow + flowSpeed * dt, 1f);
         int n = Mathf.Clamp(starDots, 0, MaxDots - BeaconDots);
-        // 路宽随路长收缩：短路不再是一团 1m 宽的星星
         float pathLen = Vector3.Distance(_smooth.p0, _smooth.p3);
         float halfWidth = RoadHalfWidthFor(pathLen, roadHalfWidth);
-        for (int i = 0; i < n; i++)
+        _diagFloorY = floorY;
+        _lastHalfWidth = halfWidth;
+        int centerCount = Mathf.Clamp(Mathf.RoundToInt(n * centerlineFraction), 0, n);
+        int railCount = n - centerCount;
+        int leftCount = railCount / 2;
+        int rightCount = railCount - leftCount;
+
+        // 中心线：暖金、密、亮——这是"路"的主脊
+        for (int i = 0; i < centerCount; i++)
         {
-            float t = Mathf.Repeat((i + 0.5f) / Mathf.Max(1, n) + _flow, 1f);
-            Vector3 p = CubicBezier(_smooth.p0, _smooth.c1, _smooth.c2, _smooth.p3, t);
-            Vector3 tangent = CubicBezier(_smooth.p0, _smooth.c1, _smooth.c2, _smooth.p3,
-                                          Mathf.Min(1f, t + 0.012f))
-                            - CubicBezier(_smooth.p0, _smooth.c1, _smooth.c2, _smooth.p3,
-                                          Mathf.Max(0f, t - 0.012f));
-            Vector3 side = Vector3.Cross(tangent, Vector3.up);
-            if (side.sqrMagnitude < 1e-6f) side = Vector3.Cross(fwd, Vector3.up);
-            side.Normalize();
+            float t = Mathf.Repeat((i + 0.5f) / Mathf.Max(1, centerCount) + _flow, 1f);
+            SamplePath(t, fwd, out Vector3 p, out Vector3 side);
+            p += side * (_jSide[i] * 0.03f);
+            p += Vector3.up * (0.03f + _jUp[i] * 0.06f);
+            float fade = Mathf.Clamp01(t / 0.05f) * Mathf.Clamp01((1f - t) / 0.08f);
+            float tw = 0.65f + 0.35f * Mathf.Sin(now * (2.2f + 2.4f * _phase[i]) + _phase[i]);
+            float size = starDotSize * 1.50f * _sMul[i] * (0.85f + 0.15f * tw) * fade;
+            PlaceDot(i, p, size, fade * (0.85f + 0.15f * tw), ColorFor(0.10f));
+        }
 
-            // 路面横向散布 + 微小高度起伏（星星不是一条线，而是一条有宽度的路）
-            float widthProfile = halfWidth * (0.82f + 0.18f * Mathf.Sin(t * Mathf.PI));
-            p += side * (_jSide[i] * widthProfile);
-            p += Vector3.up * (0.03f + _jUp[i] * 0.10f);
-
-            // 两端淡出（路头/路尾自然消失在空气里）
+        // 两条侧轨：淡紫、暗、固定在锥形宽度边缘——给出"路面"宽度但不糊住中心
+        for (int j = 0; j < leftCount; j++)
+        {
+            int i = centerCount + j;
+            float t = Mathf.Repeat((j + 0.5f) / Mathf.Max(1, leftCount) + _flow, 1f);
+            SamplePath(t, fwd, out Vector3 p, out Vector3 side);
+            float width = halfWidth * Mathf.Lerp(1f, taper, t);
+            p += side * (-width * (0.90f + 0.10f * _jSide[i]));
+            p += Vector3.up * (0.03f + _jUp[i] * 0.08f);
             float fade = Mathf.Clamp01(t / 0.05f) * Mathf.Clamp01((1f - t) / 0.08f);
             float tw = 0.62f + 0.38f * Mathf.Sin(now * (2.2f + 2.4f * _phase[i]) + _phase[i]);
-            float size = starDotSize * _sMul[i] * (0.85f + 0.15f * tw) * fade;
-
-            PlaceDot(i, p, size, fade * (0.72f + 0.28f * tw), ColorFor(_pick[i]));
+            float size = starDotSize * 0.70f * _sMul[i] * (0.85f + 0.15f * tw) * fade;
+            PlaceDot(i, p, size, fade * (0.42f + 0.16f * tw), ColorFor(0.80f));
+        }
+        for (int j = 0; j < rightCount; j++)
+        {
+            int i = centerCount + leftCount + j;
+            float t = Mathf.Repeat((j + 0.5f) / Mathf.Max(1, rightCount) + _flow, 1f);
+            SamplePath(t, fwd, out Vector3 p, out Vector3 side);
+            float width = halfWidth * Mathf.Lerp(1f, taper, t);
+            p += side * (width * (0.90f + 0.10f * _jSide[i]));
+            p += Vector3.up * (0.03f + _jUp[i] * 0.08f);
+            float fade = Mathf.Clamp01(t / 0.05f) * Mathf.Clamp01((1f - t) / 0.08f);
+            float tw = 0.62f + 0.38f * Mathf.Sin(now * (2.2f + 2.4f * _phase[i]) + _phase[i]);
+            float size = starDotSize * 0.70f * _sMul[i] * (0.85f + 0.15f * tw) * fade;
+            PlaceDot(i, p, size, fade * (0.42f + 0.16f * tw), ColorFor(0.80f));
         }
 
         // ── 终点星星柱：老师身侧 0.15~1.0m 高度，明确"路通向这里" ──
@@ -221,6 +274,19 @@ public class StardustPath : MonoBehaviour
         for (int i = n + BeaconDots; i < MaxDots; i++)
             if (_dotR[i] != null) _dotR[i].enabled = false;
 
+        // ── 指路彗星：沿中心线飞向老师，方向感的主视觉 ──
+        if (_comet != null && _cometR != null)
+        {
+            _cometT = Mathf.Repeat(_cometT + cometSpeed * dt, 1f);
+            Vector3 cp = CubicBezier(_smooth.p0, _smooth.c1, _smooth.c2, _smooth.p3, _cometT);
+            _comet.position = cp;
+            _comet.rotation = Quaternion.LookRotation(cp - eye.position, Vector3.up);
+            _comet.localScale = Vector3.one * (cometSize * (0.9f + 0.1f * Mathf.Sin(now * 6f)));
+            _cometR.enabled = true;
+            if (_cometMat != null)
+                _cometMat.SetColor("_Color", new Color(1f, 0.96f, 0.78f, 0.95f));
+        }
+
         // ── 诊断（2s 一条）──
         _diagT += dt;
         if (_diagT >= 2f)
@@ -233,6 +299,18 @@ public class StardustPath : MonoBehaviour
                       $"老师锚={_diagTeacher.ToString("F2")} 眼={eyePos.ToString("F2")} " +
                       $"老师方位角={ang:F0}° 地板Y={floorY:F2} 星点={n}+{BeaconDots}");
         }
+    }
+
+    void SamplePath(float t, Vector3 fwd, out Vector3 p, out Vector3 side)
+    {
+        p = CubicBezier(_smooth.p0, _smooth.c1, _smooth.c2, _smooth.p3, t);
+        Vector3 tangent = CubicBezier(_smooth.p0, _smooth.c1, _smooth.c2, _smooth.p3,
+                                      Mathf.Min(1f, t + 0.012f))
+                        - CubicBezier(_smooth.p0, _smooth.c1, _smooth.c2, _smooth.p3,
+                                      Mathf.Max(0f, t - 0.012f));
+        side = Vector3.Cross(tangent, Vector3.up);
+        if (side.sqrMagnitude < 1e-6f) side = Vector3.Cross(fwd, Vector3.up);
+        side.Normalize();
     }
 
     void PlaceDot(int i, Vector3 pos, float size, float alpha, Color col)
@@ -262,12 +340,38 @@ public class StardustPath : MonoBehaviour
         return v - Mathf.Floor(v);
     }
 
+    /// <summary>诊断字符串（纯函数，供单测/会话日志）：起点/终点/老师锚/路长/宽度/方位角。</summary>
+    public static string FormatSnapshot(Vector3 start, Vector3 end, Vector3 teacher, Vector3 eye,
+                                        Vector3 forward, float floorY, float width, int dots)
+    {
+        Vector3 fwd = new Vector3(forward.x, 0f, forward.z);
+        if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
+        fwd.Normalize();
+        Vector3 dirT = new Vector3(teacher.x - eye.x, 0f, teacher.z - eye.z);
+        float ang = dirT.sqrMagnitude > 1e-4f
+            ? Vector3.SignedAngle(fwd, dirT.normalized, Vector3.up)
+            : 0f;
+        return $"start={start.ToString("F2")} end={end.ToString("F2")} " +
+               $"teacher={teacher.ToString("F2")} eye={eye.ToString("F2")} " +
+               $"floor={floorY:F2} len={Vector3.Distance(start, end):F2} " +
+               $"width={width:F2} dots={dots} angle={ang:F0}";
+    }
+
+    /// <summary>当前路径的会话诊断快照（路径开启时由驱动层每 2s 写入 events.jsonl）。</summary>
+    public string DebugSnapshot()
+    {
+        Vector3 e = eye != null ? eye.position : Vector3.zero;
+        Vector3 f = eye != null ? eye.forward : Vector3.forward;
+        return FormatSnapshot(_diagStart, _diagEnd, _diagTeacher, e, f,
+                              _diagFloorY, _lastHalfWidth, starDots + BeaconDots);
+    }
+
     /// <summary>路面半宽随路长收缩（纯函数，供单测）：短路若保持 1m 宽会变成"一团星星"。</summary>
     public static float RoadHalfWidthFor(float pathLength, float baseHalfWidth)
     {
-        // 3m 以上保持设定路宽；越短越窄（0.4m 的路 → 约 0.07m 半宽），下限 6cm
-        float k = Mathf.Clamp01(pathLength / 3f);
-        return Mathf.Clamp(baseHalfWidth * k, 0.06f, baseHalfWidth);
+        // 2026-10-24：按路长 10% 给半宽（2m→0.20m、5m→0.28m 封顶），下限 0.10m；
+        // 不再固定 0.5m，避免短路上宽过长度变成"一团星星"。
+        return Mathf.Clamp(pathLength * 0.10f, 0.10f, baseHalfWidth);
     }
 
     /// <summary>三次贝塞尔采样（公开为静态，供 EditMode 几何测试/预览使用）。</summary>
